@@ -1,0 +1,24 @@
+# Asus configuration options
+
+config MACH_ASUS
+	bool "Asus device"
+	depends on ARCH_QCOM
+	help
+	  Support for Asus products
+
+config MACH_ASUS_SDM845
+	bool "Asus SDM845"
+	depends on ARCH_QCOM
+	select MACH_ASUS
+	help
+	  Support for Asus SDM845 devices
+
+menu "Asus board selection"
+
+config MACH_ASUS_Z01R
+	bool "Asus Z01R board"
+	select MACH_ASUS_SDM845
+	help
+		Support for Asus Zenfone 5z
+
+endmenu
