@@ -209,6 +209,12 @@ void panic(const char *fmt, ...)
 		panic_on_warn = 0;
 	}
 
+	if (!in_atomic())
+	{
+		pr_emerg("sys_sync:try sys_sync in panic\n");
+		exec_fs_sync_work();
+	}
+
 	/*
 	 * Disable local interrupts. This will prevent panic_smp_self_stop
 	 * from deadlocking the first cpu that invokes the panic, since
