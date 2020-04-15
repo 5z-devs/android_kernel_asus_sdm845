@@ -55,7 +55,9 @@ static const char * const power_supply_usb_type_text[] = {
 };
 
 static const char * const power_supply_status_text[] = {
-	"Unknown", "Charging", "Discharging", "Not charging", "Full"
+	"Unknown", "Charging", "Discharging", "Not charging", "Full",
+	"Quick charging","Not Quick charging",
+	"Quick charging 10W","Not Quick charging 10W"
 };
 
 static const char * const power_supply_charge_type_text[] = {
@@ -493,6 +495,8 @@ static struct device_attribute power_supply_attrs[] = {
 	POWER_SUPPLY_ATTR(battery_type),
 	POWER_SUPPLY_ATTR(cycle_counts),
 	POWER_SUPPLY_ATTR(serial_number),
+	POWER_SUPPLY_ATTR(pd_qc_state),
+	POWER_SUPPLY_ATTR(status_qcom),
 };
 
 static struct attribute *
