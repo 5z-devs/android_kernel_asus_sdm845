@@ -382,6 +382,7 @@ void fg_notify_charger(struct fg_dev *fg)
 {
 	union power_supply_propval prop = {0, };
 	int rc;
+	BAT_DBG("%s: enter\n", __func__);
 
 	if (!fg->batt_psy)
 		return;
@@ -914,8 +915,21 @@ int fg_get_msoc(struct fg_dev *fg, int *msoc)
 	else if (*msoc == 0)
 		*msoc = 0;
 	else
-		*msoc = DIV_ROUND_CLOSEST((*msoc - 1) * (FULL_CAPACITY - 2),
-				FULL_SOC_RAW - 2) + 1;
+		*msoc = DIV_ROUND_CLOSEST((*msoc - 1) * (FULL_CAPACITY - 1),
+				FULL_SOC_RAW - 1) + 1;
+
+	if(g_asus_get_once && *msoc==100)
+	{
+		printk("[ASUS][FG] go to schedule chip->asus_check_full_work\n");
+		cancel_delayed_work(&chip->asus_check_full_work);
+		schedule_delayed_work(&chip->asus_check_full_work,msecs_to_jiffies(100));
+	}
+	else if(g_asus_get_once)
+	{
+		printk("[ASUS][FG] set g_asus_get_once to 0,msoc=%d\n",*msoc);
+		g_asus_get_once = 0;
+	}
+
 	return 0;
 }
 
