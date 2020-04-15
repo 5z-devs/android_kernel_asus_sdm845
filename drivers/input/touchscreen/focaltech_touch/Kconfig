@@ -3,10 +3,12 @@
 #
 
 config TOUCHSCREEN_FTS
-	bool "Focaltech Touchscreen"
+	tristate "Focaltech touch device driver"
+	depends on I2C
+	default n
 	help
-	  Say Y here if you have Focaltech touch panel.
-	  If unsure, say N.
+	Say Y here if you have Focaltech touch panel.
+	If unsure, say N.
 
 config TOUCHSCREEN_FTS_DIRECTORY
 	string "Focaltech ts directory name"
