@@ -69,33 +69,33 @@ extern void dsi_bridge_pre_enable(struct drm_bridge *bridge);*/
 u8 panel_current_mode = PANEL_ON_MODE;
 //ASUS BSP Display, cabc mode +++
 enum {
-       OFF_MODE = 0x0,
-       UI_MODE,
-       STILL_MODE,
-       MOVING_MODE,
+	OFF_MODE = 0x0,
+	UI_MODE,
+	STILL_MODE,
+	MOVING_MODE,
 };
 //ASUS BSP Display, cabc mode ---
 u8 cabc_current_mode = MOVING_MODE;
 static ssize_t cabc_mode_switch_proc_write(struct file *filp, const char *buff, size_t len, loff_t *off)
 {
-    char messages[256];
-    struct mipi_dsi_device *dsi;
+	char messages[256];
+	struct mipi_dsi_device *dsi;
 
-    memset(messages, 0, sizeof(messages));
+	memset(messages, 0, sizeof(messages));
 
-    if (len > 256)
-        len = 256;
-    if (copy_from_user(messages, buff, len))
-        return -EFAULT;
+	if (len > 256)
+		len = 256;
+	if (copy_from_user(messages, buff, len))
+		return -EFAULT;
 
 	if(strncmp(messages, "0", 1) == 0)  //off
-        cabc_current_mode = OFF_MODE;
+		cabc_current_mode = OFF_MODE;
 	else if(strncmp(messages, "1", 1) == 0) //ui
-        cabc_current_mode = UI_MODE;
+		cabc_current_mode = UI_MODE;
 	else if(strncmp(messages, "2", 1) == 0) //still
-        cabc_current_mode = STILL_MODE;
+		cabc_current_mode = STILL_MODE;
 	else if(strncmp(messages, "3", 1) == 0) //moving
-        cabc_current_mode = MOVING_MODE;
+		cabc_current_mode = MOVING_MODE;
 
 	mutex_lock(&g_asus_panel->panel_lock);
 	if(g_asus_panel->panel_initialized)
