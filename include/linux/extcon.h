@@ -185,6 +185,8 @@ struct extcon_dev;
  */
 extern int extcon_get_state(struct extcon_dev *edev, unsigned int id);
 
+extern int extcon_set_state_sync_asus(struct extcon_dev *edev, int state);
+
 /*
  * Following APIs get the property of each external connector.
  * The 'id' argument indicates the defined external connector
@@ -258,6 +260,11 @@ extern int extcon_blocking_sync(struct extcon_dev *edev, unsigned int id,
 							u8 val);
 #else /* CONFIG_EXTCON */
 static inline int extcon_get_state(struct extcon_dev *edev, unsigned int id)
+{
+	return 0;
+}
+
+static int extcon_set_state_sync_asus(struct extcon_dev *edev, int state)
 {
 	return 0;
 }
