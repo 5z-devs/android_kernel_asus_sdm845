@@ -516,6 +516,9 @@ static inline u32 int_sqrt64(u64 x)
 }
 #endif
 
+extern char lcd_unique_id[64];
+extern char lcd_id1[64];
+extern char lcd_stage_id[64];
 extern void bust_spinlocks(int yes);
 extern int oops_in_progress;		/* If set, an oops, panic(), BUG() or die() is in progress */
 extern int panic_timeout;
