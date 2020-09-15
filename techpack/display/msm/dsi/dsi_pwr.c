@@ -11,6 +11,8 @@
 #include "dsi_parser.h"
 #include "dsi_defs.h"
 
+extern int fts_gesture_mode_en;
+
 /*
  * dsi_pwr_parse_supply_node() - parse power supply node from root device node
  */
@@ -158,12 +160,16 @@ static int dsi_pwr_enable_vregs(struct dsi_regulator_info *regs, bool enable)
 				}
 			}
 
-			rc = regulator_enable(vreg->vreg);
-			if (rc) {
-				DSI_ERR("enable failed for %s, rc=%d\n",
-				       vreg->vreg_name, rc);
-				goto error_disable_voltage;
-			}
+            if(fts_gesture_mode_en && (strcmp(vreg->vreg_name, "lab")==0 || strcmp(vreg->vreg_name, "ibb")==0)){
+				pr_err("[Display] skip enable regulators for %s\n", regs->vregs[i].vreg_name);
+			}else{
+                rc = regulator_enable(vreg->vreg);
+                if (rc) {
+                    pr_err("enable failed for %s, rc=%d\n",
+                           vreg->vreg_name, rc);
+                    goto error_disable_voltage;
+                }
+            }
 
 			if (vreg->post_on_sleep)
 				usleep_range((post_on_ms * 1000),
@@ -186,7 +192,19 @@ static int dsi_pwr_enable_vregs(struct dsi_regulator_info *regs, bool enable)
 
 			(void)regulator_set_load(regs->vregs[i].vreg,
 						regs->vregs[i].disable_load);
-			(void)regulator_disable(regs->vregs[i].vreg);
+            if(system_state > SYSTEM_RUNNING){
+				pr_err("[Display]disable regulators for %s\n",
+				regs->vregs[i].vreg_name);
+				(void)regulator_disable(regs->vregs[i].vreg);
+			}else{
+					if(fts_gesture_mode_en && (strcmp(regs->vregs[i].vreg_name, "lab")==0 || strcmp(regs->vregs[i].vreg_name, "ibb")==0)){
+					pr_err("[Display] skip disable regulators for %s\n", regs->vregs[i].vreg_name);
+				}else{
+					pr_err("[Display]disable regulators for %s\n",
+						   regs->vregs[i].vreg_name);
+			        (void)regulator_disable(regs->vregs[i].vreg);
+                }
+            }
 
 			if (post_off_ms)
 				usleep_range((post_off_ms * 1000),
