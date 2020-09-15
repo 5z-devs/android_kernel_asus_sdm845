@@ -33,6 +33,11 @@
 #define DSI_CLOCK_BITRATE_RADIX 10
 #define MAX_TE_SOURCE_ID  2
 
+//ASUS_BSP add to export display panel id to touch driver +++
+char* dsi_panel_id = NULL;
+EXPORT_SYMBOL(dsi_panel_id);
+//ASUS_BSP add to export display panel id to touch driver ---
+
 static char dsi_display_primary[MAX_CMDLINE_PARAM_LEN];
 static char dsi_display_secondary[MAX_CMDLINE_PARAM_LEN];
 static struct dsi_display_boot_param boot_displays[MAX_DSI_ACTIVE_DISPLAY] = {
@@ -205,12 +210,13 @@ int dsi_display_set_backlight(struct drm_connector *connector,
 	panel = dsi_display->panel;
 
 	mutex_lock(&panel->panel_lock);
-	if (!dsi_panel_initialized(panel)) {
-		rc = -EINVAL;
-		goto error;
-	}
 
 	panel->bl_config.bl_level = bl_lvl;
+	if (!dsi_panel_initialized(panel)) {
+		pr_debug("[%s] set backlight before panel initialized, caching value: %d\n",dsi_display->name, bl_lvl);
+		rc = 0;
+		goto error;
+	}
 
 	/* scale backlight */
 	bl_scale = panel->bl_config.bl_scale;
@@ -2184,6 +2190,7 @@ static void dsi_display_parse_cmdline_topology(struct dsi_display *display,
 		boot_str = dsi_display_primary;
 	else
 		boot_str = dsi_display_secondary;
+    dsi_panel_id = dsi_display_primary; //ASUS_BSP add to export display panel id to touch driver
 
 	sw_te = strnstr(boot_str, ":swte", strlen(boot_str));
 	if (sw_te)
@@ -5205,10 +5212,18 @@ static int dsi_display_bind(struct device *dev,
 					display->name, rc);
 			goto error;
 		}
+		/**
+		* if backlight level was set via backlight sysfs before the
+		* panel init, honor that value now
+		*/
+		if (display->panel->bl_config.bl_level)
+			dsi_display_set_backlight(display,display->panel->bl_config.bl_level);
 	}
 
 	/* register te irq handler */
 	dsi_display_register_te_irq(display);
+
+		mutex_init(&dsi_op_mutex);
 
 	goto error;
 
@@ -7570,10 +7585,12 @@ int dsi_display_pre_commit(void *display,
 	return rc;
 }
 
+extern struct dsi_panel *g_asus_panel;
 int dsi_display_enable(struct dsi_display *display)
 {
 	int rc = 0;
 	struct dsi_display_mode *mode;
+	g_asus_display = display;
 
 	if (!display || !display->panel) {
 		DSI_ERR("Invalid params\n");
@@ -7624,6 +7641,12 @@ int dsi_display_enable(struct dsi_display *display)
 			       display->name, rc);
 			goto error;
 		}
+		/**
+		* if backlight level was set via backlight sysfs before the
+		* panel init, honor that value now
+		*/
+		if (display->panel->bl_config.bl_level)
+			dsi_display_set_backlight(display,display->panel->bl_config.bl_level);
 	}
 
 	/* Block sending pps command if modeset is due to fps difference */
