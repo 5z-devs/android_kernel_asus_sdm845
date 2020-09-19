@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright (c) 2015-2020, The Linux Foundation. All rights reserved.
  */
+#define DEBUG 1
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/slab.h>
@@ -26,6 +27,14 @@
 #include "wcd-mbhc-adc.h"
 #include <asoc/wcd-mbhc-v2-api.h>
 
+/* ASUS_BSP +++*/
+extern uint32_t g_ZL;
+extern uint32_t g_ZR;
+
+/*  Fix TT214489:headset hook key sometimes can't play or pause music (system suspend) */
+#include <linux/ktime.h>
+static struct wakeup_source hook_key_wake_lock;
+/* ASUS_BSP ---*/
 void wcd_mbhc_jack_report(struct wcd_mbhc *mbhc,
 			  struct snd_soc_jack *jack, int status, int mask)
 {
@@ -83,7 +92,7 @@ static void wcd_program_hs_vref(struct wcd_mbhc *mbhc)
 
 	dev_dbg(component->dev, "%s: reg_val  = %x\n",
 		__func__, reg_val);
-	WCD_MBHC_REG_UPDATE_BITS(WCD_MBHC_HS_VREF, reg_val);
+	WCD_MBHC_REG_UPDATE_BITS(WCD_MBHC_HS_VREF, 0x03);
 }
 
 static void wcd_program_btn_threshold(const struct wcd_mbhc *mbhc, bool micbias)
@@ -692,6 +701,11 @@ void wcd_mbhc_report_plug(struct wcd_mbhc *mbhc, int insertion,
 					&mbhc->zl, &mbhc->zr);
 			WCD_MBHC_REG_UPDATE_BITS(WCD_MBHC_FSM_EN,
 						 fsm_en);
+			/* ASUS_BSP +++*/
+			g_ZL = mbhc->zl;
+			g_ZR = mbhc->zr;
+			//printk("wcd_mbhc_v2 : print hs_imp_val : LL = %d , RR = %d\n",g_ZL, g_ZR);
+			/* ASUS_BSP ---*/
 			if ((mbhc->zl > mbhc->mbhc_cfg->linein_th) &&
 				(mbhc->zr > mbhc->mbhc_cfg->linein_th) &&
 				(jack_type == SND_JACK_HEADPHONE)) {
@@ -1187,8 +1201,13 @@ static irqreturn_t wcd_mbhc_btn_press_handler(int irq, void *data)
 		goto done;
 	}
 	mask = wcd_mbhc_get_button_mask(mbhc);
-	if (mask == SND_JACK_BTN_0)
+	if (mask == SND_JACK_BTN_0) {
+		/* ASUS_BSP +++ Fix TT214489:headset hook key sometimes can't play or pause music (system suspend) */
+		__pm_wakeup_event(&hook_key_wake_lock, 3000);
+		pr_err("%s:after Wakelock 3 sec for hook_key \n",__func__);
+		/* ASUS_BSP --- */
 		mbhc->btn_press_intr = true;
+	}
 
 	if (mbhc->current_plug != MBHC_PLUG_TYPE_HEADSET) {
 		pr_debug("%s: Plug isn't headset, ignore button press\n",
@@ -1834,6 +1853,9 @@ int wcd_mbhc_start(struct wcd_mbhc *mbhc, struct wcd_mbhc_config *mbhc_cfg)
 		dev_dbg(card->dev,
 			"%s: skipping USB c analog configuration\n", __func__);
 	}
+
+	/* ASUS_BSP +++ Fix TT214489:headset hook key sometimes can't play or pause music (system suspend) */
+	wakeup_source_init(&hook_key_wake_lock, "hook_key_lock");
 
 	/* Parse fsa switch handle */
 	if (mbhc_cfg->enable_usbc_analog) {

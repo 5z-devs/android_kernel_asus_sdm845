@@ -9698,7 +9698,7 @@ static const struct tavil_reg_mask_val tavil_codec_reg_defaults[] = {
 	{WCD934X_CDC_TX6_TX_PATH_CFG1, 0x01, 0x00},
 	{WCD934X_CDC_TX7_TX_PATH_CFG1, 0x01, 0x00},
 	{WCD934X_CDC_TX8_TX_PATH_CFG1, 0x01, 0x00},
-	{WCD934X_RX_OCP_CTL, 0x0F, 0x02}, /* OCP number of attempts is 2 */
+	{WCD934X_RX_OCP_CTL, 0xFF, 0x3F}, /* OCP number of attempts is F,current is 440MA */
 	{WCD934X_HPH_OCP_CTL, 0xFF, 0x3A}, /* OCP current limit */
 	{WCD934X_HPH_L_TEST, 0x01, 0x01},
 	{WCD934X_HPH_R_TEST, 0x01, 0x01},
@@ -10460,6 +10460,7 @@ static int tavil_soc_codec_probe(struct snd_soc_component *component)
 	int i, ret;
 	void *ptr = NULL;
 
+	printk("[Audio][Debug] tavil_soc_codec_probe \n");
 	control = dev_get_drvdata(component->dev->parent);
 
 	snd_soc_component_init_regmap(component, control->regmap);
@@ -10509,6 +10510,7 @@ static int tavil_soc_codec_probe(struct snd_soc_component *component)
 	}
 
 	tavil->component = component;
+	registered_codec = tavil->component;
 	for (i = 0; i < COMPANDER_MAX; i++)
 		tavil->comp_enabled[i] = 0;
 

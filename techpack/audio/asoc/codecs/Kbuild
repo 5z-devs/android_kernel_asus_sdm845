@@ -289,3 +289,10 @@ mbhc_dlkm-y := $(MBHC_OBJS)
 
 obj-$(CONFIG_SND_SOC_MSM_HDMI_CODEC_RX) += hdmi_dlkm.o
 hdmi_dlkm-y := $(HDMICODEC_OBJS)
+
+#for AWINIC AW889X Smart K PA
+obj-$(CONFIG_SND_SOC_AW87339) += aw87339_audio_rcv.o \
+								aw87339_audio_spk.o
+
+#for nxp AMP
+obj-$(CONFIG_SND_SOC_TFA9874) += tfa9874/
