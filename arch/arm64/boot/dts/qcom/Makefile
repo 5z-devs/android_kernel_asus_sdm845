@@ -1,3 +1,27 @@
+ifeq ($(CONFIG_MACH_ASUS_Z01R),y)
+ifeq ($(CONFIG_BUILD_ARM64_DT_OVERLAY),y)
+	dtbo-$(CONFIG_MACH_ASUS_SDM845) += \
+		ZS600KL-overlay.dtbo \
+		ZS620KL-overlay.dtbo \
+		ZS620KL-evb-overlay.dtbo \
+		ZS620KL-SR1-overlay.dtbo \
+		ZS620KL-SR2-overlay.dtbo \
+		ZS620KL-ER-overlay.dtbo \
+		ZS620KL-ER2-overlay.dtbo \
+		ZS620KL-ER3-overlay.dtbo \
+		ZS620KL-PR-overlay.dtbo
+
+ZS600KL-overlay.dtbo-base := sdm845-v2.dtb
+ZS620KL-overlay.dtbo-base := sdm845-v2.dtb
+ZS620KL-evb-overlay.dtbo-base := sdm845-v2.dtb
+ZS620KL-SR1-overlay.dtbo-base := sdm845-v2.dtb
+ZS620KL-SR2-overlay.dtbo-base := sdm845-v2.dtb
+ZS620KL-ER-overlay.dtbo-base := sdm845-v2.dtb
+ZS620KL-ER2-overlay.dtbo-base := sdm845-v2.dtb
+ZS620KL-ER3-overlay.dtbo-base := sdm845-v2.dtb
+ZS620KL-PR-overlay.dtbo-base := sdm845-v2.dtb
+endif
+else
 dtb-$(CONFIG_ARCH_QCOM)	+= apq8016-sbc.dtb msm8916-mtp.dtb
 dtb-$(CONFIG_ARCH_QCOM)	+= msm8996-mtp.dtb
 dtb-$(CONFIG_ARCH_QCOM)	+= apq8096-db820c.dtb
@@ -113,6 +137,7 @@ dtb-$(CONFIG_ARCH_SDM845) += sdm845-sim.dtb \
 	sdm845-interposer-sdm670-cdp.dtb \
 	sdm845-v2.1-rb3.dtb \
 	sdm845-v2.1-mtp.dtb
+endif
 endif
 
 ifeq ($(CONFIG_BUILD_ARM64_DT_OVERLAY),y)
