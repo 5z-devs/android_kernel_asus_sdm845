@@ -4055,6 +4055,12 @@ struct afe_lpass_core_shared_clk_config_command {
 #define ADM_CMD_COPP_OPEN_TOPOLOGY_ID_DTS_HPX		0x10015002
 #define ADM_CMD_COPP_OPEN_TOPOLOGY_ID_AUDIOSPHERE	0x10028000
 
+//asus_bsp++
+#define ADM_CMD_COPP_OPEN_TOPOLOGY_ID_SPK_P 0x10314
+#define ADM_CMD_COPP_OPEN_TOPOLOGY_ID_HP 0x20314
+#define ADM_CMD_COPP_OPEN_TOPOLOGY_ID_USBHP 0x10028026
+//asus_bsp--
+
 /* Memory map regions command payload used by the
  * #ASM_CMD_SHARED_MEM_MAP_REGIONS ,#ADM_CMD_SHARED_MEM_MAP_REGIONS
  * commands.
@@ -10127,7 +10133,7 @@ struct afe_clk_set {
 	 * for enable and disable clock.
 	 *	"clk_freq_in_hz", "clk_attri", and "clk_root"
 	 *	are ignored in disable clock case.
-	 *	@values 
+	 *	@values\A0
 	 *	- 0 -- Disabled
 	 *	- 1 -- Enabled  @tablebulletend
 	 */

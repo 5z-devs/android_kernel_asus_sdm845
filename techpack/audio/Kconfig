@@ -153,4 +153,10 @@ config WCD_DSP_GLINK
 config WCD_SPI_AC
 	tristate "WCD_SPI_AC"
 
+config SND_SOC_AW87339
+	tristate "SND_SOC_AW87339"
+
+config SND_SOC_TFA9874
+	tristate "SND_SOC_TFA9874"
+
 endmenu

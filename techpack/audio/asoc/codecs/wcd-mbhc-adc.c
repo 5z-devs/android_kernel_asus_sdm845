@@ -269,7 +269,7 @@ done:
 
 	return anc_mic_found;
 }
-
+#if 0
 /* To determine if cross connection occurred */
 static int wcd_check_cross_conn(struct wcd_mbhc *mbhc)
 {
@@ -349,6 +349,7 @@ done:
 
 	return (plug_type == MBHC_PLUG_TYPE_GND_MIC_SWAP) ? true : false;
 }
+#endif
 
 static int wcd_mbhc_adc_get_hs_thres(struct wcd_mbhc *mbhc)
 {
@@ -640,7 +641,8 @@ static void wcd_correct_swch_plug(struct work_struct *work)
 
 	/* Check for cross connection */
 	do {
-		cross_conn = wcd_check_cross_conn(mbhc);
+		//cross_conn = wcd_check_cross_conn(mbhc);
+		cross_conn =0;
 		try++;
 	} while (try < mbhc->swap_thr);
 
@@ -729,7 +731,8 @@ correct_plug_type:
 		if ((output_mv <= hs_threshold) &&
 		    (!is_pa_on)) {
 			/* Check for cross connection*/
-			ret = wcd_check_cross_conn(mbhc);
+			//ret = wcd_check_cross_conn(mbhc);
+			ret = 0;
 			if (ret < 0)
 				continue;
 			else if (ret > 0) {
