@@ -1942,7 +1942,7 @@ int sde_crtc_get_secure_transition_ops(struct drm_crtc *crtc,
 	SDE_DEBUG("crtc%d, secure_level%d old_valid_fb%d\n",
 			crtc->base.id, secure_level, old_valid_fb);
 
-	SDE_EVT32_VERBOSE(DRMID(crtc), secure_level, smmu_state->state,
+	 SDE_EVT32(DRMID(crtc), secure_level, smmu_state->state,
 			old_valid_fb, SDE_EVTLOG_FUNC_ENTRY);
 	/**
 	 * SMMU operations need to be delayed in case of
