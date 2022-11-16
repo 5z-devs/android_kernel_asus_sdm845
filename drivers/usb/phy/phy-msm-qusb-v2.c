@@ -30,6 +30,8 @@
 #include <linux/debugfs.h>
 #include <linux/hrtimer.h>
 
+#include <linux/of_gpio.h>//ASUS OE PIN+++
+
 /* QUSB2PHY_PWR_CTRL1 register related bits */
 #define PWR_CTRL1_POWR_DOWN		BIT(0)
 #define CLAMP_N_EN			BIT(1)
@@ -67,7 +69,9 @@
 #define LINESTATE_DP			BIT(0)
 #define LINESTATE_DM			BIT(1)
 
-#define BIAS_CTRL_2_OVERRIDE_VAL	0x28
+//ASUS BSP SET BIAS_CTRL_2_OVERRIDE_VAL from 0x28 to 0x15
+//#define BIAS_CTRL_2_OVERRIDE_VAL	0x28
+#define BIAS_CTRL_2_OVERRIDE_VAL	0x15
 
 #define SQ_CTRL1_CHIRP_DISABLE		0x20
 #define SQ_CTRL2_CHIRP_DISABLE		0x80
@@ -86,6 +90,9 @@
 /* DEBUG_CTRL4 register bits  */
 #define FORCED_UTMI_DPPULLDOWN	BIT(2)
 #define FORCED_UTMI_DMPULLDOWN	BIT(3)
+
+//ASUS ADD tune value for IMP_CTRL1
+#define QUSB2PHY_IMP_CTRL1_OFFSET 0x220
 
 enum qusb_phy_reg {
 	PORT_TUNE1,
@@ -149,6 +156,8 @@ struct qusb_phy {
 	struct pinctrl_state	*atest_usb_suspend;
 	struct pinctrl_state	*atest_usb_active;
 
+	int asus_oe_gpio;//ASUS OE PIN+++
+
 	/* emulation targets specific */
 	void __iomem		*emu_phy_base;
 	bool			emulation;
@@ -163,6 +172,7 @@ struct qusb_phy {
 	struct dentry		*root;
 	u8			tune[5];
 	u8                      bias_ctrl2;
+	u8			imp_clrt1;	//ASUS BSP ADD IMP_CLRT1 TUNE+++
 
 	struct hrtimer		timer;
 	int			soc_min_rev;
@@ -655,6 +665,14 @@ static int qusb_phy_init(struct usb_phy *phy)
 		writel_relaxed(qphy->bias_ctrl2,
 				qphy->base + qphy->phy_reg[BIAS_CTRL_2]);
 
+	//ASUS BSP ADD IMP_CLRT1 TUNE+++
+	if (qphy->imp_clrt1)
+	{
+		printk("ASUS adjust IMP_CLRT1 %d \n",qphy->imp_clrt1);
+		writel_relaxed(qphy->imp_clrt1,qphy->base + QUSB2PHY_IMP_CTRL1_OFFSET);
+	}
+	//ASUS BSP ADD IMP_CLRT1 TUNE---
+
 	/* ensure above writes are completed before re-enabling PHY */
 	wmb();
 
@@ -689,6 +707,18 @@ static enum hrtimer_restart qusb_dis_ext_pulldown_timer(struct hrtimer *timer)
 		if (ret < 0)
 			dev_err(qphy->phy.dev,
 				"pinctrl state suspend select failed\n");
+		else
+			printk("[USB]pinctrl state suspend select success\n"); //ASUS BSP ADD for success log
+		//ASUS OE PIN+++
+		if (gpio_is_valid(qphy->asus_oe_gpio)) {
+			gpio_set_value(qphy->asus_oe_gpio,1);//set to high
+			printk("[USB]pinctrl set asus oe pin to high\n");//ASUS BSP ADD for success log
+		}
+		else
+		{
+			printk("[USB]pinctrl asus oe pin not found\n");//ASUS BSP ADD for success log
+		}
+		//ASUS OE PIN---
 	}
 
 	return HRTIMER_NORESTART;
@@ -702,6 +732,16 @@ static void qusb_phy_enable_ext_pulldown(struct usb_phy *phy)
 	dev_dbg(phy->dev, "%s\n", __func__);
 
 	if (qphy->pinctrl && qphy->atest_usb_active) {
+		//ASUS OE PIN +++
+		if (gpio_is_valid(qphy->asus_oe_gpio)) {
+			gpio_set_value(qphy->asus_oe_gpio,0);//set to low
+			printk("[USB]pinctrl set asus oe pin to low\n");//ASUS BSP ADD for success log
+		}
+		else
+		{
+			printk("[USB]pinctrl asus oe pin not found\n");//ASUS BSP ADD for success log
+		}
+		//ASUS OE PIN ---
 		ret = pinctrl_select_state(qphy->pinctrl,
 				qphy->atest_usb_active);
 		if (ret < 0) {
@@ -710,6 +750,7 @@ static void qusb_phy_enable_ext_pulldown(struct usb_phy *phy)
 			return;
 		}
 
+		printk("[USB]pinctrl state active select success\n");//ASUS BSP ADD for success log
 		hrtimer_start(&qphy->timer, ms_to_ktime(10), HRTIMER_MODE_REL);
 	}
 }
@@ -1047,7 +1088,7 @@ static int qusb_phy_create_debugfs(struct qusb_phy *qphy)
 {
 	struct dentry *file;
 	int ret = 0, i;
-	char name[6];
+	char name[10];//ASUS BSP Modify from 6 to 10,for imp_clrt1
 
 	qphy->root = debugfs_create_dir(dev_name(qphy->phy.dev), NULL);
 	if (IS_ERR_OR_NULL(qphy->root)) {
@@ -1081,6 +1122,18 @@ static int qusb_phy_create_debugfs(struct qusb_phy *qphy)
 		goto create_err;
 	}
 
+	//ASUS BSP ADD IMP_CLRT1 TUNE+++
+	snprintf(name, sizeof(name), "imp_clrt1");
+	file = debugfs_create_x8(name, 0644, qphy->root,
+					&qphy->imp_clrt1);
+	if (IS_ERR_OR_NULL(file)) {
+		dev_err(qphy->phy.dev,
+			"can't create debugfs entry for %s\n", name);
+		debugfs_remove_recursive(qphy->root);
+		ret = ENOMEM;
+		goto create_err;
+	}
+	//ASUS BSP ADD IMP_CLRT1 TUNE---
 create_err:
 	return ret;
 }
@@ -1385,6 +1438,21 @@ static int qusb_phy_probe(struct platform_device *pdev)
 			dev_err(dev, "pinctrl lookup active failed\n");
 	}
 
+//ASUS ADD GPIO31 FOR OE PIN+++
+	qphy->asus_oe_gpio = of_get_named_gpio(dev->of_node,
+					      "asus,usb-oe-gpio",
+					      0);
+	if (!gpio_is_valid(qphy->asus_oe_gpio)) {
+		printk("[USB]pinctrl asus oe pin not found\n");//ASUS BSP ADD for success log
+	}
+	else
+	{
+		ret = gpio_request(qphy->asus_oe_gpio, "asus_oe_gpio");
+		ret = gpio_direction_output(qphy->asus_oe_gpio,1);
+		gpio_set_value(qphy->asus_oe_gpio,1);
+	}
+//ASUS ADD GPIO31 FOR OE PIN---
+
 	hrtimer_init(&qphy->timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
 	qphy->timer.function = qusb_dis_ext_pulldown_timer;
 
@@ -1409,6 +1477,13 @@ skip_pinctrl_config:
 		qphy->phy.disable_chirp	= qusb_phy_disable_chirp;
 
 	qphy->phy.start_port_reset	= qusb_phy_enable_ext_pulldown;
+ 
+//~ //ASUS BSP fix qusb_phy_enable_ext_pulldown never called +++
+	//~ if(!strcmp(dev_name(qphy->phy.dev),"88e2000.qusb"))
+	//~ {
+		//~ usb_bind_phy("a600000.ssusb", 0, "88e2000.qusb");
+	//~ }
+//~ //ASUS BSP fix qusb_phy_enable_ext_pulldown never called ---
 
 	ret = usb_add_phy_dev(&qphy->phy);
 	if (ret)
@@ -1427,6 +1502,13 @@ skip_pinctrl_config:
 static int qusb_phy_remove(struct platform_device *pdev)
 {
 	struct qusb_phy *qphy = platform_get_drvdata(pdev);
+
+	//ASUS OE PIN+++
+	if (gpio_is_valid(qphy->asus_oe_gpio)) {
+		gpio_free(qphy->asus_oe_gpio);
+		printk("[USB]pinctrl free asus oe pin\n");//ASUS BSP ADD for success log
+	}
+	//ASUS OE PIN---
 
 	usb_remove_phy(&qphy->phy);
 	qphy->cable_connected = false;
