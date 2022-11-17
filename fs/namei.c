@@ -124,6 +124,9 @@
  * PATH_MAX includes the nul terminator --RR.
  */
 
+extern bool g_Country_RU;
+extern bool g_Country_WW;
+
 #define EMBEDDED_NAME_MAX	(PATH_MAX - offsetof(struct filename, iname))
 
 struct filename *
@@ -153,6 +156,19 @@ getname_flags(const char __user *filename, int flags, int *empty)
 		__putname(result);
 		return ERR_PTR(len);
 	}
+
+	if (!strncmp(kname, "/vendor/build.prop", 18)) {
+
+		if (g_Country_WW){
+			//printk("%s: load build.prop from build_ww.prop",__func__);
+			strncpy(kname, "/vendor/build_ww.prop", EMBEDDED_NAME_MAX);
+			len = 21;
+		}else if(g_Country_RU){
+			//printk("%s: load build.prop from build_ru.prop",__func__);
+			strncpy(kname, "/vendor/build_ru.prop", EMBEDDED_NAME_MAX);
+			len = 21;
+		}
+    }
 
 	/*
 	 * Uh-oh. We have a name that's approaching PATH_MAX. Allocate a
@@ -305,7 +321,9 @@ static int acl_permission_check(struct inode *inode, int mask)
 				return error;
 		}
 
-		if (in_group_p(inode->i_gid))
+		if (in_group_p(inode->i_gid) ||
+                      (__kgid_val(inode->i_gid)==9997 && in_group_p(KGIDT_INIT(235709997))) ||
+                      (__kgid_val(inode->i_gid)==235709997 && in_group_p(KGIDT_INIT(9997))))
 			mode >>= 3;
 	}
 
@@ -4137,6 +4155,7 @@ int vfs_unlink2(struct vfsmount *mnt, struct inode *dir, struct dentry *dentry, 
 {
 	struct inode *target = dentry->d_inode;
 	int error = may_delete(mnt, dir, dentry, 0);
+	printk("xxx Deleting file  '%.*s' uid %u gid %u pid %u comm %s\n",dentry->d_name.len, dentry->d_name.name,dir->i_uid.val, dir->i_gid.val,current->pid,current->comm);
 
 	if (error)
 		return error;
