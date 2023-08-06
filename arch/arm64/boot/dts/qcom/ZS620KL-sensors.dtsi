@@ -49,7 +49,16 @@
 };*/
 
 &pmi8998_haptics {
-	qcom,wave-play-rate-us = <4255>;
-	qcom,vmax-mv = <2520>;
 	status = "okay";
+	compatible = "qcom,qpnp-haptics";
+	qcom,pmic-misc = <&pmi8998_misc>;
+	qcom,misc-clk-trim-error-reg = <0xf3>;
+	qcom,actuator-type = <0>;
+	qcom,ilim-ma = <800>;
+	qcom,lra-auto-mode;
+	qcom,lra-high-z = "opt1";
+	qcom,sc-dbc-cycles = <8>;
+	qcom,en-brake;
+	qcom,vmax-mv = <2520>;
+	qcom,wave-play-rate-us = <4255>;
 };
