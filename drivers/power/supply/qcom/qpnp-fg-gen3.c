@@ -2515,7 +2515,7 @@ static void fg_cycle_counter_update(struct fg_dev *fg)
 {
 	struct fg_gen3_chip *chip = container_of(fg, struct fg_gen3_chip, fg);
 	int rc = 0, bucket, i, batt_soc;
-
+	
 	/* Try one more time if previous data not loaded */
 	if(!g_cyclecount_initialized) {
 		asus_batt_cycle_count_init();/* Try one more time */
@@ -2523,7 +2523,7 @@ static void fg_cycle_counter_update(struct fg_dev *fg)
 
 	if (!chip->cyc_ctr.en)
 		return;
-
+		
 	asus_update_cycle_count(chip);
 
 	mutex_lock(&chip->cyc_ctr.lock);
@@ -5890,8 +5890,6 @@ static int fg_gen3_probe(struct platform_device *pdev)
 
 	device_init_wakeup(fg->dev, true);
 	schedule_delayed_work(&fg->profile_load_work, msecs_to_jiffies(FG_DELAY_BATT_ID_MS));
-
-	asus_add_battery_health_fun(); //battery health upgrade
 
 	pr_debug("FG GEN3 driver probed successfully\n");
 	return 0;
