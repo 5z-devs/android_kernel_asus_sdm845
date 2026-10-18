@@ -1,8 +1,3 @@
-/* SPDX-License-Identifier: GPL-2.0-only WITH Linux-syscall-note */
-/*
- * Copyright (c) 2016-2019, The Linux Foundation. All rights reserved.
- */
-
 #ifndef __UAPI_CAM_ICP_H__
 #define __UAPI_CAM_ICP_H__
 
@@ -18,20 +13,16 @@
 #define CAM_ICP_DEV_TYPE_MAX     5
 
 /* definitions needed for icp aquire device */
-#define CAM_ICP_RES_TYPE_BPS         1
-#define CAM_ICP_RES_TYPE_IPE_RT      2
-#define CAM_ICP_RES_TYPE_IPE         3
-#define CAM_ICP_RES_TYPE_IPE_SEMI_RT 4
-#define CAM_ICP_RES_TYPE_BPS_RT      5
-#define CAM_ICP_RES_TYPE_BPS_SEMI_RT 6
-#define CAM_ICP_RES_TYPE_MAX         7
+#define CAM_ICP_RES_TYPE_BPS        1
+#define CAM_ICP_RES_TYPE_IPE_RT     2
+#define CAM_ICP_RES_TYPE_IPE        3
+#define CAM_ICP_RES_TYPE_MAX        4
 
 /* packet opcode types */
-#define CAM_ICP_OPCODE_IPE_UPDATE   0
-#define CAM_ICP_OPCODE_BPS_UPDATE   1
+#define CAM_ICP_OPCODE_IPE_UPDATE 0
+#define CAM_ICP_OPCODE_BPS_UPDATE 1
 #define CAM_ICP_OPCODE_IPE_SETTINGS 2
 #define CAM_ICP_OPCODE_BPS_SETTINGS 3
-
 
 /* IPE input port resource type */
 #define CAM_ICP_IPE_INPUT_IMAGE_FULL            0x0
