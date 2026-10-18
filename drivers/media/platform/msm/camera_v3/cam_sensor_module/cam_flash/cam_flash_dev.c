@@ -1,4 +1,4 @@
-/* Copyright (c) 2017-2018, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2017-2019, 2021 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -16,6 +16,8 @@
 #include "cam_flash_soc.h"
 #include "cam_flash_core.h"
 #include "cam_common_util.h"
+
+#include "asus_flash.h"
 
 static int32_t cam_flash_driver_cmd(struct cam_flash_ctrl *fctrl,
 		void *arg, struct cam_flash_private_soc *soc_private)
@@ -42,6 +44,7 @@ static int32_t cam_flash_driver_cmd(struct cam_flash_ctrl *fctrl,
 		struct cam_sensor_acquire_dev flash_acq_dev;
 		struct cam_create_dev_hdl bridge_params;
 
+		asus_flash_set_camera_state(1);//ASUS_BSP Zhengwei "porting flash"
 		CAM_DBG(CAM_FLASH, "CAM_ACQUIRE_DEV");
 
 		if (fctrl->flash_state != CAM_FLASH_STATE_INIT) {
@@ -71,9 +74,14 @@ static int32_t cam_flash_driver_cmd(struct cam_flash_ctrl *fctrl,
 		bridge_params.v4l2_sub_dev_flag = 0;
 		bridge_params.media_entity_flag = 0;
 		bridge_params.priv = fctrl;
-
+		bridge_params.dev_id = CAM_FLASH;
 		flash_acq_dev.device_handle =
 			cam_create_device_hdl(&bridge_params);
+		if (flash_acq_dev.device_handle <= 0) {
+			rc = -EFAULT;
+			CAM_ERR(CAM_FLASH, "Can not create device handle");
+			goto release_mutex;
+		}
 		fctrl->bridge_intf.device_hdl =
 			flash_acq_dev.device_handle;
 		fctrl->bridge_intf.session_hdl =
@@ -131,6 +139,7 @@ static int32_t cam_flash_driver_cmd(struct cam_flash_ctrl *fctrl,
 			CAM_WARN(CAM_FLASH, "Power Down Failed");
 
 		fctrl->flash_state = CAM_FLASH_STATE_INIT;
+		asus_flash_set_camera_state(0);//ASUS_BSP Zhengwei "porting flash"
 		break;
 	}
 	case CAM_QUERY_CAP: {
@@ -181,7 +190,9 @@ static int32_t cam_flash_driver_cmd(struct cam_flash_ctrl *fctrl,
 			goto release_mutex;
 		}
 
+		cam_flash_off(fctrl);
 		fctrl->func_tbl.flush_req(fctrl, FLUSH_ALL, 0);
+		fctrl->last_flush_req = 0;
 		fctrl->flash_state = CAM_FLASH_STATE_ACQUIRE;
 		break;
 	}
@@ -318,7 +329,14 @@ static int cam_flash_platform_remove(struct platform_device *pdev)
 		return 0;
 	}
 
-	devm_kfree(&pdev->dev, fctrl);
+	CAM_INFO(CAM_FLASH, "Platform remove invoked");
+	mutex_lock(&fctrl->flash_mutex);
+	cam_flash_shutdown(fctrl);
+	mutex_unlock(&fctrl->flash_mutex);
+	cam_unregister_subdev(&(fctrl->v4l2_dev_str));
+	platform_set_drvdata(pdev, NULL);
+	v4l2_set_subdevdata(&fctrl->v4l2_dev_str.sd, NULL);
+	kfree(fctrl);
 
 	return 0;
 }
@@ -332,6 +350,8 @@ static int32_t cam_flash_i2c_driver_remove(struct i2c_client *client)
 		CAM_ERR(CAM_FLASH, "Flash device is NULL");
 		return -EINVAL;
 	}
+
+	CAM_INFO(CAM_FLASH, "i2c driver remove invoked");
 	/*Free Allocated Mem */
 	kfree(fctrl->i2c_data.per_frame);
 	fctrl->i2c_data.per_frame = NULL;
@@ -353,6 +373,8 @@ static int cam_flash_subdev_close(struct v4l2_subdev *sd,
 	mutex_lock(&fctrl->flash_mutex);
 	cam_flash_shutdown(fctrl);
 	mutex_unlock(&fctrl->flash_mutex);
+
+	CAM_INFO(CAM_FLASH,"cam_flash_subdev_close done");
 
 	return 0;
 }
@@ -376,6 +398,8 @@ static int cam_flash_init_subdev(struct cam_flash_ctrl *fctrl)
 {
 	int rc = 0;
 
+	strlcpy(fctrl->device_name, CAM_FLASH_NAME,
+		sizeof(fctrl->device_name));
 	fctrl->v4l2_dev_str.internal_ops =
 		&cam_flash_internal_ops;
 	fctrl->v4l2_dev_str.ops = &cam_flash_subdev_ops;
@@ -397,7 +421,7 @@ static int32_t cam_flash_platform_probe(struct platform_device *pdev)
 	int32_t rc = 0, i = 0;
 	struct cam_flash_ctrl *fctrl = NULL;
 
-	CAM_DBG(CAM_FLASH, "Enter");
+	CAM_INFO(CAM_FLASH, "Probe Enter");
 	if (!pdev->dev.of_node) {
 		CAM_ERR(CAM_FLASH, "of_node NULL");
 		return -EINVAL;
@@ -483,11 +507,15 @@ static int32_t cam_flash_platform_probe(struct platform_device *pdev)
 	fctrl->bridge_intf.ops.link_setup = cam_flash_establish_link;
 	fctrl->bridge_intf.ops.apply_req = cam_flash_apply_request;
 	fctrl->bridge_intf.ops.flush_req = cam_flash_flush_request;
+	fctrl->last_flush_req = 0;
 
 	mutex_init(&(fctrl->flash_mutex));
 
 	fctrl->flash_state = CAM_FLASH_STATE_INIT;
-	CAM_DBG(CAM_FLASH, "Probe success");
+
+	asus_flash_init(fctrl);//ASUS_BSP Zhengwei "porting flash"
+
+	CAM_INFO(CAM_FLASH, "Probe Succeed");
 	return rc;
 
 free_cci_resource:
@@ -501,6 +529,7 @@ free_resource:
 	fctrl->soc_info.soc_private = NULL;
 	kfree(fctrl);
 	fctrl = NULL;
+	CAM_ERR(CAM_FLASH, "Probe Failed!");
 	return rc;
 }
 
@@ -569,6 +598,7 @@ static int32_t cam_flash_i2c_driver_probe(struct i2c_client *client,
 	fctrl->bridge_intf.ops.link_setup = cam_flash_establish_link;
 	fctrl->bridge_intf.ops.apply_req = cam_flash_apply_request;
 	fctrl->bridge_intf.ops.flush_req = cam_flash_flush_request;
+	fctrl->last_flush_req = 0;
 
 	mutex_init(&(fctrl->flash_mutex));
 	fctrl->flash_state = CAM_FLASH_STATE_INIT;

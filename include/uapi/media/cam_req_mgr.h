@@ -1,8 +1,3 @@
-/* SPDX-License-Identifier: GPL-2.0-only WITH Linux-syscall-note */
-/*
- * Copyright (c) 2016-2019, The Linux Foundation. All rights reserved.
- */
-
 #ifndef __UAPI_LINUX_CAM_REQ_MGR_H
 #define __UAPI_LINUX_CAM_REQ_MGR_H
 
@@ -29,6 +24,7 @@
 #define CAM_FLASH_DEVICE_TYPE     (CAM_DEVICE_TYPE_BASE + 11)
 #define CAM_EEPROM_DEVICE_TYPE    (CAM_DEVICE_TYPE_BASE + 12)
 #define CAM_OIS_DEVICE_TYPE       (CAM_DEVICE_TYPE_BASE + 13)
+#define CAM_IRLED_DEVICE_TYPE     (CAM_DEVICE_TYPE_BASE + 14)
 
 /* cam_req_mgr hdl info */
 #define CAM_REQ_MGR_HDL_IDX_POS           8
@@ -251,6 +247,7 @@ struct cam_req_mgr_link_control {
 #define CAM_REQ_MGR_CACHE_OPS                   (CAM_COMMON_OPCODE_MAX + 12)
 #define CAM_REQ_MGR_LINK_CONTROL                (CAM_COMMON_OPCODE_MAX + 13)
 #define CAM_REQ_MGR_LINK_V2                     (CAM_COMMON_OPCODE_MAX + 14)
+#define CAM_REQ_MGR_REQUEST_DUMP                (CAM_COMMON_OPCODE_MAX + 15)
 /* end of cam_req_mgr opcodes */
 
 #define CAM_MEM_FLAG_HW_READ_WRITE              (1<<0)

@@ -1,4 +1,5 @@
-/* Copyright (c) 2017-2018, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2017-2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022, 2024, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -17,6 +18,11 @@
 #include "cam_soc_util.h"
 #include "cam_trace.h"
 #include "cam_common_util.h"
+#include "cam_packet_util.h"
+
+
+#include "asus_cam_sensor.h" //ASUS_BSP Zhengwei "porting sensor ATD"
+#include "asus_ois.h"   //ASUS_BSP Zhengwei "speed up camera 0 open"
 
 static void cam_sensor_update_req_mgr(
 	struct cam_sensor_ctrl_t *s_ctrl,
@@ -92,8 +98,10 @@ static int32_t cam_sensor_i2c_pkt_parse(struct cam_sensor_ctrl_t *s_ctrl,
 	struct cam_control *ioctl_ctrl = NULL;
 	struct cam_packet *csl_packet = NULL;
 	struct cam_cmd_buf_desc *cmd_desc = NULL;
+	struct cam_buf_io_cfg *io_cfg = NULL;
 	struct i2c_settings_array *i2c_reg_settings = NULL;
 	size_t len_of_buff = 0;
+	size_t remain_len = 0;
 	uint32_t *offset = NULL;
 	struct cam_config_dev_cmd config;
 	struct i2c_data_settings *i2c_data = NULL;
@@ -115,27 +123,42 @@ static int32_t cam_sensor_i2c_pkt_parse(struct cam_sensor_ctrl_t *s_ctrl,
 		&generic_ptr,
 		&len_of_buff);
 	if (rc < 0) {
-		CAM_ERR(CAM_SENSOR, "Failed in getting the buffer: %d", rc);
+		CAM_ERR(CAM_SENSOR, "Failed in getting the packet: %d", rc);
 		return rc;
 	}
 
+	remain_len = len_of_buff;
+	if ((sizeof(struct cam_packet) > len_of_buff) ||
+		((size_t)config.offset >= len_of_buff -
+		sizeof(struct cam_packet))) {
+		CAM_ERR(CAM_SENSOR,
+			"Inval cam_packet strut size: %zu, len_of_buff: %zu",
+			 sizeof(struct cam_packet), len_of_buff);
+		rc = -EINVAL;
+		goto rel_pkt_buf;
+	}
+
+	remain_len -= (size_t)config.offset;
 	csl_packet = (struct cam_packet *)(generic_ptr +
 		(uint32_t)config.offset);
-	if (config.offset > len_of_buff) {
-		CAM_ERR(CAM_SENSOR,
-			"offset is out of bounds: off: %lld len: %zu",
-			 config.offset, len_of_buff);
-		return -EINVAL;
+
+	if (cam_packet_util_validate_packet(csl_packet,
+		remain_len)) {
+		CAM_ERR(CAM_SENSOR, "Invalid packet params");
+		rc = -EINVAL;
+		goto rel_pkt_buf;
+
 	}
 
 	if ((csl_packet->header.op_code & 0xFFFFFF) !=
 		CAM_SENSOR_PACKET_OPCODE_SENSOR_INITIAL_CONFIG &&
 		csl_packet->header.request_id <= s_ctrl->last_flush_req
 		&& s_ctrl->last_flush_req != 0) {
-		CAM_DBG(CAM_SENSOR,
-			"reject request %lld, last request to flush %lld",
+		CAM_ERR(CAM_SENSOR,
+			"reject request %lld, last request to flush %u",
 			csl_packet->header.request_id, s_ctrl->last_flush_req);
-		return -EINVAL;
+		rc = -EINVAL;
+		goto rel_pkt_buf;
 	}
 
 	if (csl_packet->header.request_id > s_ctrl->last_flush_req)
@@ -158,7 +181,7 @@ static int32_t cam_sensor_i2c_pkt_parse(struct cam_sensor_ctrl_t *s_ctrl,
 	}
 	case CAM_SENSOR_PACKET_OPCODE_SENSOR_STREAMON: {
 		if (s_ctrl->streamon_count > 0)
-			return 0;
+			goto rel_pkt_buf;
 
 		s_ctrl->streamon_count = s_ctrl->streamon_count + 1;
 		i2c_reg_settings = &i2c_data->streamon_settings;
@@ -168,7 +191,7 @@ static int32_t cam_sensor_i2c_pkt_parse(struct cam_sensor_ctrl_t *s_ctrl,
 	}
 	case CAM_SENSOR_PACKET_OPCODE_SENSOR_STREAMOFF: {
 		if (s_ctrl->streamoff_count > 0)
-			return 0;
+			goto rel_pkt_buf;
 
 		s_ctrl->streamoff_count = s_ctrl->streamoff_count + 1;
 		i2c_reg_settings = &i2c_data->streamoff_settings;
@@ -176,13 +199,33 @@ static int32_t cam_sensor_i2c_pkt_parse(struct cam_sensor_ctrl_t *s_ctrl,
 		i2c_reg_settings->is_settings_valid = 1;
 		break;
 	}
+	case CAM_SENSOR_PACKET_OPCODE_SENSOR_READ: {
+		i2c_reg_settings = &(i2c_data->read_settings);
+		i2c_reg_settings->request_id = 0;
+		i2c_reg_settings->is_settings_valid = 1;
 
+		CAM_DBG(CAM_SENSOR, "number of IO configs: %d:",
+			csl_packet->num_io_configs);
+		if (csl_packet->num_io_configs == 0) {
+			CAM_ERR(CAM_SENSOR, "No I/O configs to process");
+			goto rel_pkt_buf;
+		}
+		io_cfg = (struct cam_buf_io_cfg *) ((uint8_t *)
+				&csl_packet->payload +
+				csl_packet->io_configs_offset);
+
+		if (io_cfg == NULL) {
+			CAM_ERR(CAM_SENSOR, "I/O config is invalid(NULL)");
+			goto rel_pkt_buf;
+		}
+		break;
+	}
 	case CAM_SENSOR_PACKET_OPCODE_SENSOR_UPDATE: {
 		if ((s_ctrl->sensor_state == CAM_SENSOR_INIT) ||
 			(s_ctrl->sensor_state == CAM_SENSOR_ACQUIRE)) {
 			CAM_WARN(CAM_SENSOR,
 				"Rxed Update packets without linking");
-			return 0;
+			goto rel_pkt_buf;
 		}
 
 		i2c_reg_settings =
@@ -202,7 +245,7 @@ static int32_t cam_sensor_i2c_pkt_parse(struct cam_sensor_ctrl_t *s_ctrl,
 			 * fix it.
 			 */
 			cam_sensor_update_req_mgr(s_ctrl, csl_packet);
-			return 0;
+			goto rel_pkt_buf;
 		}
 		break;
 	}
@@ -211,15 +254,16 @@ static int32_t cam_sensor_i2c_pkt_parse(struct cam_sensor_ctrl_t *s_ctrl,
 			(s_ctrl->sensor_state == CAM_SENSOR_ACQUIRE)) {
 			CAM_WARN(CAM_SENSOR,
 				"Rxed NOP packets without linking");
-			return 0;
+			goto rel_pkt_buf;
 		}
 
 		cam_sensor_update_req_mgr(s_ctrl, csl_packet);
-		return 0;
+		goto rel_pkt_buf;
 	}
 	default:
 		CAM_ERR(CAM_SENSOR, "Invalid Packet Header");
-		return -EINVAL;
+		rc = -EINVAL;
+		goto rel_pkt_buf;
 	}
 
 	offset = (uint32_t *)&csl_packet->payload;
@@ -227,10 +271,10 @@ static int32_t cam_sensor_i2c_pkt_parse(struct cam_sensor_ctrl_t *s_ctrl,
 	cmd_desc = (struct cam_cmd_buf_desc *)(offset);
 
 	rc = cam_sensor_i2c_command_parser(&s_ctrl->io_master_info,
-			i2c_reg_settings, cmd_desc, 1);
+			i2c_reg_settings, cmd_desc, 1, io_cfg);
 	if (rc < 0) {
 		CAM_ERR(CAM_SENSOR, "Fail parsing I2C Pkt: %d", rc);
-		return rc;
+		goto rel_pkt_buf;
 	}
 
 	if ((csl_packet->header.op_code & 0xFFFFFF) ==
@@ -240,8 +284,44 @@ static int32_t cam_sensor_i2c_pkt_parse(struct cam_sensor_ctrl_t *s_ctrl,
 		cam_sensor_update_req_mgr(s_ctrl, csl_packet);
 	}
 
+rel_pkt_buf:
+	if (cam_mem_put_cpu_buf(config.packet_handle))
+		CAM_WARN(CAM_SENSOR, "Failed in put the buffer: %llu",
+			config.packet_handle);
+
 	return rc;
 }
+
+//ASUS_BSP Zhengwei +++ "override i2c setting for ov8856"
+#ifdef PROJECT_DRACO
+static void override_i2c_write_setting(struct camera_io_master *io_master_info, struct cam_sensor_i2c_reg_setting * setting, const char * op_string)
+{
+	int i;
+
+	struct cam_sensor_ctrl_t* s_ctrl = container_of(io_master_info,struct cam_sensor_ctrl_t,io_master_info);
+
+	if(s_ctrl->sensordata->slave_info.sensor_id == 0x885a)
+	{
+		for(i=0;i<setting->size;i++)
+		{
+			if(setting->reg_setting[i].reg_addr == 0x3614)
+			{
+				if(is_OV8856_R1B(s_ctrl->id) == 1 && setting->reg_setting[i].reg_data != 0x20)
+				{
+					setting->reg_setting[i].reg_data = 0x20;
+					CAM_INFO(CAM_SENSOR,"OV8856 R1B, change reg 0x3614 to 0x20 in OP %s\n",op_string);
+				}
+				else if(is_OV8856_R1B(s_ctrl->id) == 0 && setting->reg_setting[i].reg_data != 0x60)
+				{
+					setting->reg_setting[i].reg_data = 0x60;
+					CAM_INFO(CAM_SENSOR,"OV8856 R1A, change reg 0x3614 to 0x60 in OP %s\n",op_string);
+				}
+			}
+		}
+	}
+}
+#endif
+//ASUS_BSP Zhengwei --- "override i2c setting for ov8856"
 
 static int32_t cam_sensor_i2c_modes_util(
 	struct camera_io_master *io_master_info,
@@ -251,6 +331,9 @@ static int32_t cam_sensor_i2c_modes_util(
 	uint32_t i, size;
 
 	if (i2c_list->op_code == CAM_SENSOR_I2C_WRITE_RANDOM) {
+		#ifdef PROJECT_DRACO
+		override_i2c_write_setting(io_master_info,&i2c_list->i2c_settings,"WRITE_RANDOM");//ASUS_BSP Zhengwei "override i2c setting for ov8856"
+		#endif
 		rc = camera_io_dev_write(io_master_info,
 			&(i2c_list->i2c_settings));
 		if (rc < 0) {
@@ -260,6 +343,9 @@ static int32_t cam_sensor_i2c_modes_util(
 			return rc;
 		}
 	} else if (i2c_list->op_code == CAM_SENSOR_I2C_WRITE_SEQ) {
+		#ifdef PROJECT_DRACO
+		override_i2c_write_setting(io_master_info,&i2c_list->i2c_settings,"WRITE_SEQ");//ASUS_BSP Zhengwei "override i2c setting for ov8856"
+		#endif
 		rc = camera_io_dev_write_continuous(
 			io_master_info,
 			&(i2c_list->i2c_settings),
@@ -271,6 +357,9 @@ static int32_t cam_sensor_i2c_modes_util(
 			return rc;
 		}
 	} else if (i2c_list->op_code == CAM_SENSOR_I2C_WRITE_BURST) {
+		#ifdef PROJECT_DRACO
+		override_i2c_write_setting(io_master_info,&i2c_list->i2c_settings,"WRITE_BURST");//ASUS_BSP Zhengwei "override i2c setting for ov8856"
+		#endif
 		rc = camera_io_dev_write_continuous(
 			io_master_info,
 			&(i2c_list->i2c_settings),
@@ -299,7 +388,6 @@ static int32_t cam_sensor_i2c_modes_util(
 			}
 		}
 	}
-
 	return rc;
 }
 
@@ -359,7 +447,7 @@ int32_t cam_sensor_update_slave_info(struct cam_cmd_probe *probe_info,
 
 int32_t cam_handle_cmd_buffers_for_probe(void *cmd_buf,
 	struct cam_sensor_ctrl_t *s_ctrl,
-	int32_t cmd_buf_num, int cmd_buf_length)
+	int32_t cmd_buf_num, uint32_t cmd_buf_length, size_t remain_len)
 {
 	int32_t rc = 0;
 
@@ -368,6 +456,13 @@ int32_t cam_handle_cmd_buffers_for_probe(void *cmd_buf,
 		struct cam_cmd_i2c_info *i2c_info = NULL;
 		struct cam_cmd_probe *probe_info;
 
+		if (remain_len <
+			(sizeof(struct cam_cmd_i2c_info) +
+			sizeof(struct cam_cmd_probe))) {
+			CAM_ERR(CAM_SENSOR,
+				"not enough buffer for cam_cmd_i2c_info");
+			return -EINVAL;
+		}
 		i2c_info = (struct cam_cmd_i2c_info *)cmd_buf;
 		rc = cam_sensor_update_i2c_info(i2c_info, s_ctrl);
 		if (rc < 0) {
@@ -386,7 +481,8 @@ int32_t cam_handle_cmd_buffers_for_probe(void *cmd_buf,
 		break;
 	case 1: {
 		rc = cam_sensor_update_power_settings(cmd_buf,
-			cmd_buf_length, &s_ctrl->sensordata->power_info);
+			cmd_buf_length, &s_ctrl->sensordata->power_info,
+			remain_len);
 		if (rc < 0) {
 			CAM_ERR(CAM_SENSOR,
 				"Failed in updating power settings");
@@ -407,10 +503,11 @@ int32_t cam_handle_mem_ptr(uint64_t handle, struct cam_sensor_ctrl_t *s_ctrl)
 	uint32_t *cmd_buf;
 	void *ptr;
 	size_t len;
-	struct cam_packet *pkt;
-	struct cam_cmd_buf_desc *cmd_desc;
+	struct cam_packet *pkt = NULL;
+	struct cam_cmd_buf_desc *cmd_desc = NULL;
 	uintptr_t cmd_buf1 = 0;
 	uintptr_t packet = 0;
+	size_t    remain_len = 0;
 
 	rc = cam_mem_get_cpu_buf(handle,
 		&packet, &len);
@@ -418,18 +515,35 @@ int32_t cam_handle_mem_ptr(uint64_t handle, struct cam_sensor_ctrl_t *s_ctrl)
 		CAM_ERR(CAM_SENSOR, "Failed to get the command Buffer");
 		return -EINVAL;
 	}
+
 	pkt = (struct cam_packet *)packet;
+	if (pkt == NULL) {
+		CAM_ERR(CAM_SENSOR, "packet pos is invalid");
+		rc = -EINVAL;
+		goto rel_pkt_buf;
+	}
+
+	if ((len < sizeof(struct cam_packet)) ||
+		(pkt->cmd_buf_offset >= (len - sizeof(struct cam_packet)))) {
+		CAM_ERR(CAM_SENSOR, "Not enough buf provided");
+		rc = -EINVAL;
+		goto rel_pkt_buf;
+	}
+
 	cmd_desc = (struct cam_cmd_buf_desc *)
 		((uint32_t *)&pkt->payload + pkt->cmd_buf_offset/4);
 	if (cmd_desc == NULL) {
 		CAM_ERR(CAM_SENSOR, "command descriptor pos is invalid");
-		return -EINVAL;
+		rc = -EINVAL;
+		goto rel_pkt_buf;
 	}
 	if (pkt->num_cmd_buf != 2) {
 		CAM_ERR(CAM_SENSOR, "Expected More Command Buffers : %d",
 			 pkt->num_cmd_buf);
-		return -EINVAL;
+		rc = -EINVAL;
+		goto rel_pkt_buf;
 	}
+
 	for (i = 0; i < pkt->num_cmd_buf; i++) {
 		if (!(cmd_desc[i].length))
 			continue;
@@ -438,20 +552,54 @@ int32_t cam_handle_mem_ptr(uint64_t handle, struct cam_sensor_ctrl_t *s_ctrl)
 		if (rc < 0) {
 			CAM_ERR(CAM_SENSOR,
 				"Failed to parse the command Buffer Header");
-			return -EINVAL;
+			goto rel_pkt_buf;
+		}
+		if (cmd_desc[i].offset >= len) {
+			CAM_ERR(CAM_SENSOR,
+				"offset past length of buffer");
+			rc = -EINVAL;
+			goto rel_pkt_buf;
+		}
+		remain_len = len - cmd_desc[i].offset;
+		if (cmd_desc[i].length > remain_len) {
+			CAM_ERR(CAM_SENSOR,
+				"Not enough buffer provided for cmd");
+			rc = -EINVAL;
+			goto rel_pkt_buf;
 		}
 		cmd_buf = (uint32_t *)cmd_buf1;
 		cmd_buf += cmd_desc[i].offset/4;
 		ptr = (void *) cmd_buf;
 
 		rc = cam_handle_cmd_buffers_for_probe(ptr, s_ctrl,
-			i, cmd_desc[i].length);
+			i, cmd_desc[i].length, remain_len);
 		if (rc < 0) {
 			CAM_ERR(CAM_SENSOR,
 				"Failed to parse the command Buffer Header");
-			return -EINVAL;
+			goto rel_cmd_buf;
 		}
+
+		if (cam_mem_put_cpu_buf(cmd_desc[i].mem_handle))
+			CAM_WARN(CAM_SENSOR,
+				"Failed to put command Buffer : %d",
+				cmd_desc[i].mem_handle);
 	}
+
+	if (cam_mem_put_cpu_buf(handle))
+		CAM_WARN(CAM_SENSOR, "Failed to put the command Buffer: %llu",
+			handle);
+
+	return rc;
+
+rel_cmd_buf:
+	if (cam_mem_put_cpu_buf(cmd_desc[i].mem_handle))
+		CAM_WARN(CAM_SENSOR, "Failed to put command Buffer : 0x%x",
+			cmd_desc[i].mem_handle);
+rel_pkt_buf:
+	if (cam_mem_put_cpu_buf(handle))
+		CAM_WARN(CAM_SENSOR, "Failed to put the command Buffer: %llu",
+			handle);
+
 	return rc;
 }
 
@@ -507,11 +655,13 @@ void cam_sensor_shutdown(struct cam_sensor_ctrl_t *s_ctrl)
 
 	cam_sensor_release_stream_rsc(s_ctrl);
 	cam_sensor_release_per_frame_resource(s_ctrl);
-	cam_sensor_power_down(s_ctrl);
+
+	if (s_ctrl->sensor_state != CAM_SENSOR_INIT)
+		cam_sensor_power_down(s_ctrl);
 
 	rc = cam_destroy_device_hdl(s_ctrl->bridge_intf.device_hdl);
 	if (rc < 0)
-		CAM_ERR(CAM_SENSOR, " failed destroying dhdl");
+		CAM_ERR(CAM_SENSOR, "dhdl already destroyed: rc = %d", rc);
 	s_ctrl->bridge_intf.device_hdl = -1;
 	s_ctrl->bridge_intf.link_hdl = -1;
 	s_ctrl->bridge_intf.session_hdl = -1;
@@ -563,12 +713,13 @@ int32_t cam_sensor_driver_cmd(struct cam_sensor_ctrl_t *s_ctrl,
 {
 	int rc = 0;
 	struct cam_control *cmd = (struct cam_control *)arg;
-	struct cam_sensor_power_ctrl_t *power_info =
-		&s_ctrl->sensordata->power_info;
+	struct cam_sensor_power_ctrl_t *power_info = NULL;
 	if (!s_ctrl || !arg) {
 		CAM_ERR(CAM_SENSOR, "s_ctrl is NULL");
 		return -EINVAL;
 	}
+
+	power_info = &s_ctrl->sensordata->power_info;
 
 	if (cmd->op_code != CAM_SENSOR_PROBE_CMD) {
 		if (cmd->handle_type != CAM_HANDLE_USER_POINTER) {
@@ -634,6 +785,15 @@ int32_t cam_sensor_driver_cmd(struct cam_sensor_ctrl_t *s_ctrl,
 
 		/* Match sensor ID */
 		rc = cam_sensor_match_id(s_ctrl);
+//ASUS_BSP Zhengwei +++ "Fix IMX363 ID"
+#ifdef PROJECT_DRACO
+		if(rc < 0 && s_ctrl->id == CAMERA_0)
+		{
+			rc = verify_imx363_id(s_ctrl);
+			CAM_INFO(CAM_SENSOR,"Verfiy IMX363 ID %s",rc==0?"PASS":"FAIL");
+		}
+#endif
+//ASUS_BSP Zhengwei --- "Fix IMX363 ID"
 		if (rc < 0) {
 			cam_sensor_power_down(s_ctrl);
 			msleep(20);
@@ -645,7 +805,7 @@ int32_t cam_sensor_driver_cmd(struct cam_sensor_ctrl_t *s_ctrl,
 			s_ctrl->soc_info.index,
 			s_ctrl->sensordata->slave_info.sensor_slave_addr,
 			s_ctrl->sensordata->slave_info.sensor_id);
-
+		asus_cam_sensor_init(s_ctrl);//ASUS_BSP Zhengwei "porting sensor ATD"
 		rc = cam_sensor_power_down(s_ctrl);
 		if (rc < 0) {
 			CAM_ERR(CAM_SENSOR, "fail in Sensor Power Down");
@@ -690,9 +850,14 @@ int32_t cam_sensor_driver_cmd(struct cam_sensor_ctrl_t *s_ctrl,
 		bridge_params.v4l2_sub_dev_flag = 0;
 		bridge_params.media_entity_flag = 0;
 		bridge_params.priv = s_ctrl;
-
+		bridge_params.dev_id = CAM_SENSOR;
 		sensor_acq_dev.device_handle =
 			cam_create_device_hdl(&bridge_params);
+		if (sensor_acq_dev.device_handle <= 0) {
+			rc = -EFAULT;
+			CAM_ERR(CAM_SENSOR, "Can not create device handle");
+			goto release_mutex;
+		}
 		s_ctrl->bridge_intf.device_hdl = sensor_acq_dev.device_handle;
 		s_ctrl->bridge_intf.session_hdl = sensor_acq_dev.session_handle;
 
@@ -841,9 +1006,19 @@ int32_t cam_sensor_driver_cmd(struct cam_sensor_ctrl_t *s_ctrl,
 	}
 		break;
 	case CAM_CONFIG_DEV: {
+		if (s_ctrl->sensor_state < CAM_SENSOR_ACQUIRE) {
+			rc = -EINVAL;
+			CAM_ERR(CAM_SENSOR,
+				"sensor_id:[0x%x] not acquired to configure [%d] ",
+				s_ctrl->sensordata->slave_info.sensor_id,
+				s_ctrl->sensor_state
+			);
+			goto release_mutex;
+		}
+
 		rc = cam_sensor_i2c_pkt_parse(s_ctrl, arg);
 		if (rc < 0) {
-			CAM_ERR(CAM_SENSOR, "Failed CCI Config: %d", rc);
+			CAM_ERR(CAM_SENSOR, "Failed i2c pkt parse: %d", rc);
 			goto release_mutex;
 		}
 		if (s_ctrl->i2c_data.init_settings.is_settings_valid &&
@@ -851,9 +1026,13 @@ int32_t cam_sensor_driver_cmd(struct cam_sensor_ctrl_t *s_ctrl,
 
 			rc = cam_sensor_apply_settings(s_ctrl, 0,
 				CAM_SENSOR_PACKET_OPCODE_SENSOR_INITIAL_CONFIG);
+
+			s_ctrl->i2c_data.init_settings.request_id = -1;
+
 			if (rc < 0) {
 				CAM_ERR(CAM_SENSOR,
 					"cannot apply init settings");
+				delete_request(&s_ctrl->i2c_data.init_settings);
 				goto release_mutex;
 			}
 			rc = delete_request(&s_ctrl->i2c_data.init_settings);
@@ -862,16 +1041,20 @@ int32_t cam_sensor_driver_cmd(struct cam_sensor_ctrl_t *s_ctrl,
 					"Fail in deleting the Init settings");
 				goto release_mutex;
 			}
-			s_ctrl->i2c_data.init_settings.request_id = -1;
 		}
 
 		if (s_ctrl->i2c_data.config_settings.is_settings_valid &&
 			(s_ctrl->i2c_data.config_settings.request_id == 0)) {
 			rc = cam_sensor_apply_settings(s_ctrl, 0,
 				CAM_SENSOR_PACKET_OPCODE_SENSOR_CONFIG);
+
+			s_ctrl->i2c_data.config_settings.request_id = -1;
+
 			if (rc < 0) {
 				CAM_ERR(CAM_SENSOR,
 					"cannot apply config settings");
+				delete_request(
+					&s_ctrl->i2c_data.config_settings);
 				goto release_mutex;
 			}
 			rc = delete_request(&s_ctrl->i2c_data.config_settings);
@@ -881,8 +1064,26 @@ int32_t cam_sensor_driver_cmd(struct cam_sensor_ctrl_t *s_ctrl,
 				goto release_mutex;
 			}
 			s_ctrl->sensor_state = CAM_SENSOR_CONFIG;
-			s_ctrl->i2c_data.config_settings.request_id = -1;
 		}
+
+		if (s_ctrl->i2c_data.read_settings.is_settings_valid) {
+			rc = cam_sensor_i2c_read_data(
+				&s_ctrl->i2c_data.read_settings,
+				&s_ctrl->io_master_info);
+			if (rc < 0) {
+				CAM_ERR(CAM_SENSOR, "cannot read data: %d", rc);
+				delete_request(&s_ctrl->i2c_data.read_settings);
+				goto release_mutex;
+			}
+			rc = delete_request(
+				&s_ctrl->i2c_data.read_settings);
+			if (rc < 0) {
+				CAM_ERR(CAM_SENSOR,
+					"Fail in deleting the read settings");
+				goto release_mutex;
+			}
+		}
+
 	}
 		break;
 	default:
@@ -1005,6 +1206,11 @@ int cam_sensor_power_up(struct cam_sensor_ctrl_t *s_ctrl)
 		}
 	}
 
+	if(s_ctrl->id == CAMERA_0)
+	{
+		ois_power_up();//ASUS_BSP Zhengwei "speed up camera 0 open"
+	}
+
 	rc = cam_sensor_core_power_up(power_info, soc_info);
 	if (rc < 0) {
 		CAM_ERR(CAM_SENSOR, "power up the core is failed:%d", rc);
@@ -1014,6 +1220,8 @@ int cam_sensor_power_up(struct cam_sensor_ctrl_t *s_ctrl)
 	rc = camera_io_init(&(s_ctrl->io_master_info));
 	if (rc < 0)
 		CAM_ERR(CAM_SENSOR, "cci_init failed: rc: %d", rc);
+
+	s_ctrl->power_state = 1;//ASUS_BSP Zhengwei "porting sensor ATD"
 
 	return rc;
 }
@@ -1053,6 +1261,12 @@ int cam_sensor_power_down(struct cam_sensor_ctrl_t *s_ctrl)
 	}
 
 	camera_io_release(&(s_ctrl->io_master_info));
+
+	if(s_ctrl->id == CAMERA_0)
+	{
+		ois_power_down();//ASUS_BSP Zhengwei "speed up camera 0 open"
+	}
+	s_ctrl->power_state = 0;//ASUS_BSP Zhengwei "porting sensor ATD"
 
 	return rc;
 }
@@ -1210,12 +1424,19 @@ int32_t cam_sensor_flush_request(struct cam_req_mgr_flush_request *flush_req)
 		return -EINVAL;
 	}
 
+	mutex_lock(&(s_ctrl->cam_sensor_mutex));
+	if (s_ctrl->sensor_state != CAM_SENSOR_START ||
+		s_ctrl->sensor_state != CAM_SENSOR_CONFIG) {
+		mutex_unlock(&(s_ctrl->cam_sensor_mutex));
+		return rc;
+	}
+
 	if (s_ctrl->i2c_data.per_frame == NULL) {
 		CAM_ERR(CAM_SENSOR, "i2c frame data is NULL");
+		mutex_unlock(&(s_ctrl->cam_sensor_mutex));
 		return -EINVAL;
 	}
 
-	mutex_lock(&(s_ctrl->cam_sensor_mutex));
 	if (flush_req->type == CAM_REQ_MGR_FLUSH_TYPE_ALL) {
 		s_ctrl->last_flush_req = flush_req->req_id;
 		CAM_DBG(CAM_SENSOR, "last reqest to flush is %lld",
