@@ -42,7 +42,8 @@ int gf_parse_dts(struct gf_dev *gf_dev)
 	gf_dev->irq_gpio = of_get_named_gpio(np, "goodix,gpio_irq", 0);
 	if (gf_dev->irq_gpio < 0) {
 		pr_err("falied to get irq gpio!\n");
-		return gf_dev->irq_gpio;
+		rc = gf_dev->irq_gpio;
+		goto err_irq;
 	}
     pr_info("gf_dev->irq_gpio = %d\n", gf_dev->irq_gpio);
 	rc = devm_gpio_request(dev, gf_dev->irq_gpio, "goodix_irq");
@@ -51,6 +52,8 @@ int gf_parse_dts(struct gf_dev *gf_dev)
 		goto err_irq;
 	}
 	gpio_direction_input(gf_dev->irq_gpio);
+
+	return 0;
 
 err_irq:
 	devm_gpio_free(dev, gf_dev->reset_gpio);

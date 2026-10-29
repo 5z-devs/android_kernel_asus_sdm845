@@ -39,6 +39,7 @@
 #include <linux/notifier.h>
 #include <linux/fb.h>
 #include <linux/pm_qos.h>
+#include <linux/pm_wakeup.h>
 #include <linux/cpufreq.h>
 #include "gf_spi.h"
 #include <linux/msm_drm_notify.h>
@@ -74,7 +75,7 @@ static int SPIDEV_MAJOR;
 static DECLARE_BITMAP(minors, N_SPI_MINORS);
 static LIST_HEAD(device_list);
 static DEFINE_MUTEX(device_list_lock);
-static struct wakeup_source fp_wakelock;
+static struct wakeup_source *fp_wakelock;
 static struct gf_dev gf;
 
 static struct gf_key_map maps[] = {
@@ -321,7 +322,7 @@ static irqreturn_t gf_irq(int irq, void *handle)
 {
 #if defined(GF_NETLINK_ENABLE)
 	char msg = GF_NET_EVENT_IRQ;
-	__pm_wakeup_event(&fp_wakelock, WAKELOCK_HOLD_TIME);
+	__pm_wakeup_event(fp_wakelock, WAKELOCK_HOLD_TIME);
 	sendnlmsg(&msg);
 #elif defined(GF_FASYNC)
 	struct gf_dev *gf_dev = &gf;
@@ -847,7 +848,12 @@ static int gf_probe(struct platform_device *pdev)
 		goto error_hw;
 	}
 
-	wakeup_source_init(&fp_wakelock, "fp_wakelock");
+	fp_wakelock = wakeup_source_register(dev, "fp_wakelock");
+	if (!fp_wakelock) {
+		dev_err(dev, "failed to register wakeup source\n");
+		status = -ENOMEM;
+		goto error_hw;
+	}
 
 	pr_info("version V%d.%d.%02d\n", VER_MAJOR, VER_MINOR, PATCH_LEVEL);
 
@@ -886,7 +892,8 @@ static int gf_remove(struct platform_device *pdev)
 {
 	struct gf_dev *gf_dev = &gf;
 
-	wakeup_source_trash(&fp_wakelock);
+	wakeup_source_unregister(fp_wakelock);
+	fp_wakelock = NULL;
 	//fb_unregister_client(&gf_dev->notifier);
 	msm_drm_unregister_client(&gf_dev->notifier);
 	if (gf_dev->input)
