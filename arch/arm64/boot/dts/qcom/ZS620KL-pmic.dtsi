@@ -308,6 +308,9 @@
 	status = "disabled";
 };
 
+/* Disabled: RPMH_REGULATOR_MODE_PASS is not defined by this kernel's
+ * qcom,rpmh-regulator.h, which breaks dtc. Re-enable with the correct
+ * macros/values for this tree if the bobb1 override is really needed.
 &soc {
     rpmh-regulator-bobb1 {
         qcom,supported-modes =
@@ -317,6 +320,7 @@
         qcom,mode-threshold-currents = <0 1 2>;
     };
 };
+*/
 
 &smb1355_charger_0 {
 	status = "disabled";
