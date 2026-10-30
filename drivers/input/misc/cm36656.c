@@ -121,7 +121,7 @@ struct cm36656_info {
 	int (*power)(int, uint8_t); /* power to the chip */
 
 #ifdef CONFIG_HAS_WAKELOCK
-	struct wakeup_source wake_src;
+	struct wakeup_source *wake_src;
 #endif
 	int psensor_opened;
 	int lightsensor_opened;
@@ -523,13 +523,13 @@ static void sensor_irq_do_work(struct work_struct *work)
 	enable_irq(lpi->irq);
 	//asus alex wang ALS porting++++
 	lpi->ps_irq_flag =0;
-	__pm_relax(&lpi->wake_src);
+	__pm_relax(lpi->wake_src);
 }
 
 static irqreturn_t cm36656_irq_handler(int irq, void *data)
 {
 	struct cm36656_info *lpi = data;
-	__pm_wakeup_event(&lpi->wake_src, 1 * HZ);
+	__pm_wakeup_event(lpi->wake_src, 1 * HZ);
 	lpi->ps_irq_flag =1;
 	disable_irq_nosync(lpi->irq);
 	queue_work(lpi->lp_wq, &sensor_irq_work);
@@ -3080,9 +3080,12 @@ static int cm36656_probe(struct i2c_client *client,
 		goto err_create_singlethread_workqueue;
 	}
 
-#ifdef CONFIG_HAS_WAKELOCK
-	wakeup_source_init(&lpi->wake_src, "proximity_irq");
-#endif
+	lpi->wake_src = wakeup_source_register(&client->dev, "proximity_irq");
+	if (!lpi->wake_src) {
+		pr_err("[PS][CM36656 error]%s: can't register wakeup source\n", __func__);
+		ret = -ENOMEM;
+		goto err_wakeup_source_register;
+	}
 	ret = cm36656_setup(lpi);
 	if (ret < 0) {
 		pr_err("[PS_ERR][CM36656 error]%s: cm36656_setup error!\n", __func__);
@@ -3268,9 +3271,8 @@ err_create_cs_device:
 err_create_class:
 	gpio_free(lpi->intr_pin); //cm36656_setup
 err_cm36656_setup:
-#ifdef CONFIG_HAS_WAKELOCK
-	wakeup_source_trash(&lpi->wake_src);
-#endif
+	wakeup_source_unregister(lpi->wake_src);
+err_wakeup_source_register:
 	destroy_workqueue(lpi->lp_wq);
 err_create_singlethread_workqueue:
 	input_unregister_device(lpi->ps_input_dev);
