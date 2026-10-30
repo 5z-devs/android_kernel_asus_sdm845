@@ -1,6 +1,8 @@
 #ifndef __ASUS_FG_H
 #define __ASUS_FG_H
 
+struct fg_dev;
+
 #define BATTERY_TAG "[BAT][BMS]"
 #define ERROR_TAG "[ERR]"
 #define BAT_DBG(...)  printk(KERN_INFO BATTERY_TAG __VA_ARGS__)
@@ -9,11 +11,11 @@
 
 #define FAKE_TEMP_INIT	180
 
-int asus_fg_porting(struct fg_chip *chip);
+int asus_fg_porting(struct fg_dev *chip);
 void asus_set_battery_version(void);
-void asus_check_batt_id(struct fg_chip *chip);
+void asus_check_batt_id(struct fg_dev *chip);
 
-extern struct fg_chip *g_fgChip;
+extern struct fg_dev *g_fgChip;
 extern bool g_charger_mode;
 extern int fake_temp;
 extern int g_bat_reload_cond;
@@ -112,8 +114,8 @@ extern struct BATT_SAFETY_UPGRADE_PARAMS batt_safety_upgrade_params[];
 extern struct CYCLE_COUNT_DATA g_cycle_count_data;
 extern int g_cyclecount_initialized;
 extern int asus_qpnp_rtc_read_time(unsigned long * secs);
-extern int asus_update_cycle_count(struct fg_chip *chip);
-extern void asus_check_full_pending(struct fg_chip *chip, int ibatt_now, int msoc);
+extern int asus_update_cycle_count(struct fg_dev *chip);
+extern void asus_check_full_pending(struct fg_dev *chip, int ibatt_now, int msoc);
 
 int asus_batt_cycle_count_init(void);
 
