@@ -33,7 +33,7 @@ extern uint32_t g_ZR;
 
 /*  Fix TT214489:headset hook key sometimes can't play or pause music (system suspend) */
 #include <linux/ktime.h>
-static struct wakeup_source hook_key_wake_lock;
+static struct wakeup_source *hook_key_wake_lock;
 /* ASUS_BSP ---*/
 void wcd_mbhc_jack_report(struct wcd_mbhc *mbhc,
 			  struct snd_soc_jack *jack, int status, int mask)
@@ -1203,7 +1203,7 @@ static irqreturn_t wcd_mbhc_btn_press_handler(int irq, void *data)
 	mask = wcd_mbhc_get_button_mask(mbhc);
 	if (mask == SND_JACK_BTN_0) {
 		/* ASUS_BSP +++ Fix TT214489:headset hook key sometimes can't play or pause music (system suspend) */
-		__pm_wakeup_event(&hook_key_wake_lock, 3000);
+		__pm_wakeup_event(hook_key_wake_lock, 3000);
 		pr_err("%s:after Wakelock 3 sec for hook_key \n",__func__);
 		/* ASUS_BSP --- */
 		mbhc->btn_press_intr = true;
@@ -1855,7 +1855,14 @@ int wcd_mbhc_start(struct wcd_mbhc *mbhc, struct wcd_mbhc_config *mbhc_cfg)
 	}
 
 	/* ASUS_BSP +++ Fix TT214489:headset hook key sometimes can't play or pause music (system suspend) */
-	wakeup_source_init(&hook_key_wake_lock, "hook_key_lock");
+	if (!hook_key_wake_lock) {
+		hook_key_wake_lock = wakeup_source_register(card->dev,
+							    "hook_key_lock");
+		if (!hook_key_wake_lock)
+			dev_warn(card->dev,
+				 "%s: failed to register hook_key_lock wakeup source\n",
+				 __func__);
+	}
 
 	/* Parse fsa switch handle */
 	if (mbhc_cfg->enable_usbc_analog) {
