@@ -9,6 +9,7 @@
 #include <linux/gpio.h>
 #include <linux/of_gpio.h>
 #include <linux/pwm.h>
+#include <linux/leds.h>
 #include <video/mipi_display.h>
 
 #include "dsi_panel.h"
@@ -839,6 +840,28 @@ error:
 	return rc;
 }
 
+static int dsi_panel_led_bl_register(struct dsi_panel *panel,
+				struct dsi_backlight_config *bl)
+{
+	int rc = 0;
+
+	led_trigger_register_simple("bkl-trigger", &bl->wled);
+
+	/*
+	 * LED APIs don't tell us directly whether a classdev has yet been
+	 * registered to service this trigger. Until a classdev is registered,
+	 * calling led_trigger_event() has no effect and doesn't fail.
+	 */
+	if (IS_ERR_OR_NULL(bl->wled)) {
+		rc = bl->wled ? PTR_ERR(bl->wled) : -EINVAL;
+		DSI_ERR("[%s] backlight led trigger register failed, rc=%d\n",
+				panel->name, rc);
+		bl->wled = NULL;
+	}
+
+	return rc;
+}
+
 static int dsi_panel_wled_register(struct dsi_panel *panel,
 		struct dsi_backlight_config *bl)
 {
@@ -1137,6 +1160,10 @@ static int dsi_panel_bl_unregister(struct dsi_panel *panel)
 	case DSI_BACKLIGHT_WLED:
 		break;
 	case DSI_BACKLIGHT_DCS:
+		if (bl->wled) {
+			led_trigger_unregister_simple(bl->wled);
+			bl->wled = NULL;
+		}
 		break;
 	case DSI_BACKLIGHT_EXTERNAL:
 		break;
