@@ -6439,7 +6439,11 @@ static struct snd_soc_dai_link msm_mi2s_be_dai_links_er2[] = {
 };
 //for nxp AMP---
 
-static struct snd_soc_dai_link msm_mi2s_be_dai_links[] = {
+/*
+ * Only referenced through ARRAY_SIZE() now that the NXP AMP (er2) variant
+ * below is always the one registered.
+ */
+static struct snd_soc_dai_link msm_mi2s_be_dai_links[] __maybe_unused = {
 	{
 		.name = LPASS_BE_PRI_MI2S_RX,
 		.stream_name = "Primary MI2S Playback",
