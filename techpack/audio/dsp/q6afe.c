@@ -11326,7 +11326,8 @@ int send_tfa_cal_in_band(void *buf, int cmd_size)
 
 	memcpy(&prot_config, buf, cmd_size);
 
-	return afe_spk_prot_prepare(port_id, 0, 0x1000b921, &prot_config);
+	return afe_spk_prot_prepare(port_id, 0, 0x1000b921, &prot_config,
+				   cmd_size);
 }
 EXPORT_SYMBOL(send_tfa_cal_in_band);
 
