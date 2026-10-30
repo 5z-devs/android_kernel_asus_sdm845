@@ -38,6 +38,11 @@ char* dsi_panel_id = NULL;
 EXPORT_SYMBOL(dsi_panel_id);
 //ASUS_BSP add to export display panel id to touch driver ---
 
+//ASUS_BSP display +++
+struct dsi_display *g_asus_display;
+struct mutex dsi_op_mutex;
+//ASUS_BSP display ---
+
 static char dsi_display_primary[MAX_CMDLINE_PARAM_LEN];
 static char dsi_display_secondary[MAX_CMDLINE_PARAM_LEN];
 static struct dsi_display_boot_param boot_displays[MAX_DSI_ACTIVE_DISPLAY] = {
@@ -5217,13 +5222,14 @@ static int dsi_display_bind(struct device *dev,
 		* panel init, honor that value now
 		*/
 		if (display->panel->bl_config.bl_level)
-			dsi_display_set_backlight(display,display->panel->bl_config.bl_level);
+			dsi_display_set_backlight(NULL, display,
+					display->panel->bl_config.bl_level);
 	}
 
 	/* register te irq handler */
 	dsi_display_register_te_irq(display);
 
-		mutex_init(&dsi_op_mutex);
+	mutex_init(&dsi_op_mutex);
 
 	goto error;
 
@@ -7646,7 +7652,8 @@ int dsi_display_enable(struct dsi_display *display)
 		* panel init, honor that value now
 		*/
 		if (display->panel->bl_config.bl_level)
-			dsi_display_set_backlight(display,display->panel->bl_config.bl_level);
+			dsi_display_set_backlight(NULL, display,
+					display->panel->bl_config.bl_level);
 	}
 
 	/* Block sending pps command if modeset is due to fps difference */
