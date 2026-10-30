@@ -114,8 +114,8 @@ struct asus_charger{
 	int soft_jeita_state;
 	int usb_thermal_alert_irq;
 	int usb_connector_event;
-	struct extcon_dev usb_thermal_dev;
-	struct extcon_dev qc_stat_dev;
+	struct extcon_dev *usb_thermal_dev;
+	struct extcon_dev *qc_stat_dev;
 	bool jeita_stop_charge_flag;
 	bool legacy_detecting_flag;
 	int last_batt_health;

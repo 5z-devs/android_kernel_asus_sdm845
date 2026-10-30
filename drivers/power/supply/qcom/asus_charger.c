@@ -59,6 +59,13 @@ static const unsigned int qc_stat_ext_supported_cable[] = {
 	EXTCON_NONE,
 };
 
+/* The extcon devices are allocated at registration time and may be absent */
+static void asus_extcon_set_state(struct extcon_dev *edev, int state)
+{
+	if (edev)
+		extcon_set_state_sync_asus(edev, state);
+}
+
 
 static int ASUS_ADAPTER_ID = 0;
 bool charger_batt_enable = 1;
@@ -85,9 +92,9 @@ struct delayed_work SetJeitaRTCWorker;
 struct delayed_work asus_rconn_check_work;
 struct delayed_work reset_icl_work;
 struct delayed_work reset_icl_with_override_work;
-struct wakeup_source adc_check_lock;
-struct wakeup_source ChargerModeLock;
-struct wakeup_source UsbCable_Lock;
+struct wakeup_source *adc_check_lock;
+struct wakeup_source *ChargerModeLock;
+struct wakeup_source *UsbCable_Lock;
 static struct alarm jeita_alarm;
 static DEFINE_SPINLOCK(jeita_slock);
 
@@ -768,11 +775,16 @@ void asus_register_qc_stat(struct smb_charger *chg)
     struct asus_charger *asus_chg = chg->asus_chg;
     int ret;
 
-    asus_chg->qc_stat_dev.supported_cable = qc_stat_ext_supported_cable;
-    asus_chg->qc_stat_dev.name = "quick_charging";
-    dev_set_name(&asus_chg->qc_stat_dev.dev, "quick_charging");
-    ret = extcon_dev_register(&asus_chg->qc_stat_dev);
+    asus_chg->qc_stat_dev = devm_extcon_dev_allocate(chg->dev,
+                                                     qc_stat_ext_supported_cable);
+    if (IS_ERR(asus_chg->qc_stat_dev)) {
+        CHG_DBG("%s: quick_charging extcon allocation failed\n", __func__);
+        asus_chg->qc_stat_dev = NULL;
+        return;
+    }
+    ret = devm_extcon_dev_register(chg->dev, asus_chg->qc_stat_dev);
     if (ret) {
+        asus_chg->qc_stat_dev = NULL;
         CHG_DBG("%s: quick_charging extcon registration failed\n", __func__);
     } else {
         CHG_DBG("%s: quick_charging extcon registration success\n", __func__);
@@ -789,7 +801,7 @@ void asus_set_qc_stat(struct smb_charger *chg, union power_supply_propval *val)
     if (0 == asus_chg->quick_charge_ac_flag) {
         set = SWITCH_QC_OTHER;
         //~CHG_DBG("stat: %d, switch: %d\n",stat, set);
-        extcon_set_state_sync_asus(&asus_chg->qc_stat_dev, set);
+        asus_extcon_set_state(asus_chg->qc_stat_dev, set);
         return;
     }
 
@@ -813,12 +825,12 @@ void asus_set_qc_stat(struct smb_charger *chg, union power_supply_propval *val)
                     set = SWITCH_QC_NOT_QUICK_CHARGING_10W;
             }
 
-            extcon_set_state_sync_asus(&asus_chg->qc_stat_dev, set);
+            asus_extcon_set_state(asus_chg->qc_stat_dev, set);
             break;
 
         default:
             set = SWITCH_QC_OTHER;
-            extcon_set_state_sync_asus(&asus_chg->qc_stat_dev, set);
+            asus_extcon_set_state(asus_chg->qc_stat_dev, set);
             break;
     }
 
@@ -1850,7 +1862,7 @@ static enum alarmtimer_restart Jeita_Alarm_handler(struct alarm *alarm, ktime_t 
 	}
 
 	if (asus_get_prop_usb_present(&chip_dev->chg) == true) {
-		__pm_wakeup_event(&UsbCable_Lock, jiffies_to_msecs(2 * HZ));
+		__pm_wakeup_event(UsbCable_Lock, jiffies_to_msecs(2 * HZ));
 		cancel_delayed_work(&chip_dev->chg.asus_chg->asus_batt_temp_work);
 		schedule_delayed_work(&chip_dev->chg.asus_chg->asus_batt_temp_work, 0);
 	}
@@ -2814,8 +2826,8 @@ post_proc:
     asus_flow_done_flag = 1;
     asus_chg->adc_redet_flag = false;
 
-    if(adc_check_lock.active){
-		__pm_relax(&adc_check_lock);
+    if(adc_check_lock && adc_check_lock->active){
+		__pm_relax(adc_check_lock);
     }
 }
 
@@ -2859,8 +2871,8 @@ void asus_adapter_adc_det(struct smb_charger *chg, bool is_rerun)
     }
 
     OpenDpDm(true);
-    if(!adc_check_lock.active){
-		__pm_stay_awake(&adc_check_lock);
+    if(adc_check_lock && !adc_check_lock->active){
+		__pm_stay_awake(adc_check_lock);
     }
     if (chg->asus_chg->asus_qc_flag != 0) {
         if (!is_rerun)
@@ -3004,7 +3016,7 @@ void asus_handle_usb_insertion(struct work_struct *work)
 
 	if(g_charger_mode){
 		CHG_DBG("Keep ChargerModeLock for 90s\n");
-		__pm_wakeup_event(&ChargerModeLock, jiffies_to_msecs(90 * HZ));
+		__pm_wakeup_event(ChargerModeLock, jiffies_to_msecs(90 * HZ));
 	}
 
     if (!asus_get_prop_usb_present(chg)) {
@@ -3243,7 +3255,7 @@ void asus_handle_usb_removal(struct smb_charger *chg)
         chg->asus_chg->thermal_alert_release_pending_flag = false;
         // usb alert = 0, clear state
         chg->asus_chg->usb_connector_event = OTP_NOT_TRIGGER;
-        extcon_set_state_sync_asus(&chg->asus_chg->usb_thermal_dev, OTP_NOT_TRIGGER);// not trigger
+        asus_extcon_set_state(chg->asus_chg->usb_thermal_dev, OTP_NOT_TRIGGER);// not trigger
         // Enable usb charging
         if (g_asus_hw_id > 2) { // do thermal alert action after ER
             // enable USB
@@ -3281,8 +3293,8 @@ void asus_handle_usb_removal(struct smb_charger *chg)
         CHG_DBG_E("%s: Couldn't set SUSPEND_ON_COLLAPSE_USBIN_BIT rc=%d\n", __func__, rc);
     }
 
-    if(adc_check_lock.active){
-		__pm_relax(&adc_check_lock);
+    if(adc_check_lock && adc_check_lock->active){
+		__pm_relax(adc_check_lock);
     }
 
 	chg->asus_chg->last_icl_cfg = 0x14;
@@ -3463,7 +3475,7 @@ void asus_set_usb_connector_work ( struct work_struct *work)
                 // TODO: judge whether in charger mode
                 asus_chg->usb_connector_event = OTP_TRIGGER_WITH_AC;
                 if (g_ready_to_report_2 || g_charger_mode)
-					extcon_set_state_sync_asus(&asus_chg->usb_thermal_dev, OTP_TRIGGER_WITH_AC);// with AC
+					asus_extcon_set_state(asus_chg->usb_thermal_dev, OTP_TRIGGER_WITH_AC);// with AC
                 if (g_asus_hw_id > 2) { // do thermal alert action after ER
                     // USB suspend
                     smblib_set_usb_suspend(&chip_dev->chg, true);
@@ -3480,7 +3492,7 @@ void asus_set_usb_connector_work ( struct work_struct *work)
                 printk("%s: usb not present, but otg enabled\n", __func__);
                 asus_chg->usb_connector_event = OTP_TRIGGER_WITH_AC;
                 if (g_ready_to_report_2 || g_charger_mode)
-					extcon_set_state_sync_asus(&asus_chg->usb_thermal_dev, OTP_TRIGGER_WITH_AC);// with AC
+					asus_extcon_set_state(asus_chg->usb_thermal_dev, OTP_TRIGGER_WITH_AC);// with AC
                 if (g_asus_hw_id > 2) { // do thermal alert action after ER
                     // Disable otg
                     smblib_vbus_regulator_disable(chg->vbus_vreg->rdev);
@@ -3489,7 +3501,7 @@ void asus_set_usb_connector_work ( struct work_struct *work)
                 printk("%s: no cable connected\n", __func__);
                 asus_chg->usb_connector_event = OTP_TRIGGER_WITHOUT_AC;
                 if (g_ready_to_report_2 || g_charger_mode)
-					extcon_set_state_sync_asus(&asus_chg->usb_thermal_dev, OTP_TRIGGER_WITHOUT_AC);// without AC
+					asus_extcon_set_state(asus_chg->usb_thermal_dev, OTP_TRIGGER_WITHOUT_AC);// without AC
                 if (g_asus_hw_id > 2) { // do thermal alert action after ER
                     // USB suspend
                     smblib_set_usb_suspend(&chip_dev->chg, true);
@@ -3500,12 +3512,12 @@ void asus_set_usb_connector_work ( struct work_struct *work)
             printk("%s: USB_THERM_ALERT_HIGH_TRIGGER\n", __func__);
             // set thresh to min~70 deg
             usb_therm_set_thresh_1();
-            extcon_set_state_sync_asus(&asus_chg->usb_thermal_dev, OTP_NOT_TRIGGER);// not trigger
+            asus_extcon_set_state(asus_chg->usb_thermal_dev, OTP_NOT_TRIGGER);// not trigger
             // release alert and enable charging only when cable not in
             if (!usb_present) {
                 // usb alert = 0, clear state
                 asus_chg->usb_connector_event = OTP_NOT_TRIGGER;
-                //extcon_set_state_sync_asus(&asus_chg->usb_thermal_dev, OTP_NOT_TRIGGER);// not trigger
+                //asus_extcon_set_state(asus_chg->usb_thermal_dev, OTP_NOT_TRIGGER);// not trigger
                 // Enable usb charging
                 if (g_asus_hw_id > 2) { // do thermal alert action after ER
                     // enable USB
@@ -3543,7 +3555,7 @@ void asus_usb_alert_detect_work(struct work_struct *work)
         g_ready_to_report_2 = true;
         if(!g_charger_mode) {
             // report the event to UI when ims ready
-            extcon_set_state_sync_asus(&asus_chg->usb_thermal_dev, asus_chg->usb_connector_event);
+            asus_extcon_set_state(asus_chg->usb_thermal_dev, asus_chg->usb_connector_event);
         }
     } else {
         schedule_delayed_work(&asus_chg->check_usb_connector_work, msecs_to_jiffies(5000));
@@ -3599,12 +3611,17 @@ void asus_usb_thermal_alert_gpio_init(struct smb_charger *chg)
         goto error_out;
     }
     // extcon dev register
-    asus_chg->usb_thermal_dev.supported_cable = usb_connector_ext_supported_cable;
-    asus_chg->usb_thermal_dev.name = "usb_connector";
-    dev_set_name(&asus_chg->usb_thermal_dev.dev, "usb_connector");
-    rc = extcon_dev_register(&asus_chg->usb_thermal_dev);
+    asus_chg->usb_thermal_dev = devm_extcon_dev_allocate(chg->dev,
+                                                         usb_connector_ext_supported_cable);
+    if (IS_ERR(asus_chg->usb_thermal_dev)) {
+        pr_err("usb_connector extcon allocation failed");
+        asus_chg->usb_thermal_dev = NULL;
+        goto error_out;
+    }
+    rc = devm_extcon_dev_register(chg->dev, asus_chg->usb_thermal_dev);
     if (rc) {
         pr_err("usb_connector extcon registration failed");
+        asus_chg->usb_thermal_dev = NULL;
         goto error_out;
     }
     if(g_charger_mode == 0)
@@ -3908,9 +3925,9 @@ void asus_charger_init_config(struct smb_charger *chg)
 	INIT_DELAYED_WORK(&reset_icl_work, asus_reset_icl_work);
     INIT_DELAYED_WORK(&reset_icl_with_override_work, asus_reset_icl_with_override_work);
 
-    wakeup_source_init(&adc_check_lock, "adc_check_Lock");
-    wakeup_source_init(&UsbCable_Lock, "UsbCable_Lock_Wake");
-    wakeup_source_init(&ChargerModeLock, "ChargerModeLock");
+    adc_check_lock = wakeup_source_register(chg->dev, "adc_check_Lock");
+    UsbCable_Lock = wakeup_source_register(chg->dev, "UsbCable_Lock_Wake");
+    ChargerModeLock = wakeup_source_register(chg->dev, "ChargerModeLock");
     alarm_init(&jeita_alarm, ALARM_REALTIME, Jeita_Alarm_handler);
 
     create_asus_batt_charge_enable_proc_file();
