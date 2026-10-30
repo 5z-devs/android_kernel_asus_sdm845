@@ -1087,33 +1087,12 @@ static int32_t afe_callback(struct apr_client_data *data, void *priv)
 					   data->payload_size))
 			return 0;
 
-		/*
-		if (data->opcode == AFE_PORT_CMDRSP_GET_PARAM_V3)
-			param_id_pos = 4;
-		else
-			param_id_pos = 3;
-
-		if (data->payload_size >= param_id_pos * sizeof(uint32_t))
-				param_id = payload[param_id_pos - 1];
-		else {
-			pr_err("%s: Error: size %d is less than expected\n",
-				__func__, data->payload_size);
-			return -EINVAL;
-		}
-		*/
-
-		if (param_id == AUDPROC_PARAM_ID_FFV_DOA_TRACKING_MONITOR) {
-			doa_tracking_mon_afe_cb_handler(data->opcode,
-				data->payload, data->payload_size);
-		} else if (param_id == AFE_PARAM_ID_DEV_TIMING_STATS) {
-			av_dev_drift_afe_cb_handler(data->opcode, data->payload,
-						    data->payload_size);
-		} else {
-			if (rtac_make_afe_callback(data->payload,
-						   data->payload_size))
-				return 0;
-
 #ifdef CONFIG_SND_SOC_TFA9874
+		/*
+		 * The TFA9874 response payload is shorter than a regular
+		 * get param response, so it has to be handled before the
+		 * param id is extracted below.
+		 */
 		if (atomic_read(&this_afe.tfa_state) == 1) {
 			if (data->payload_size == sizeof(uint32_t))
 				atomic_set(&this_afe.status, payload[0]);
@@ -1126,6 +1105,30 @@ static int32_t afe_callback(struct apr_client_data *data, void *priv)
 			return 0;
 		}
 #endif //for nxp AMP
+
+		if (data->opcode == AFE_PORT_CMDRSP_GET_PARAM_V3)
+			param_id_pos = 4;
+		else
+			param_id_pos = 3;
+
+		if (data->payload_size >= param_id_pos * sizeof(uint32_t))
+			param_id = payload[param_id_pos - 1];
+		else {
+			pr_err("%s: Error: size %d is less than expected\n",
+				__func__, data->payload_size);
+			return -EINVAL;
+		}
+
+		if (param_id == AUDPROC_PARAM_ID_FFV_DOA_TRACKING_MONITOR) {
+			doa_tracking_mon_afe_cb_handler(data->opcode,
+				data->payload, data->payload_size);
+		} else if (param_id == AFE_PARAM_ID_DEV_TIMING_STATS) {
+			av_dev_drift_afe_cb_handler(data->opcode, data->payload,
+						    data->payload_size);
+		} else {
+			if (rtac_make_afe_callback(data->payload,
+						   data->payload_size))
+				return 0;
 
 			if (sp_make_afe_callback(data->opcode, data->payload,
 						 data->payload_size))
@@ -2501,7 +2504,7 @@ static int afe_spk_prot_prepare(int src_port, int dst_port, int param_id,
 		break;
 #ifdef CONFIG_SND_SOC_TFA9874
 	case 0x1000b921:
-		config.pdata.module_id = 0x1000b911;
+		param_info.module_id = 0x1000b911;
 		break;
 #endif //for nxp AMP
 	default:
@@ -11161,17 +11164,17 @@ int send_tfa_cal_apr(void *buf, int cmd_size, bool bRead)
 	uint32_t apr_msg[48];
 	size_t len;
 	struct rtac_cal_block_data *tfa_cal = &(this_afe.tfa_cal);
-	struct afe_port_param_data_v2 *pdata;
+	struct param_hdr_v1 *pdata;
 
 	pr_debug("%s\n", __func__);
 
-	if (tfa_cal->map_data.ion_handle == NULL) {
+	if (tfa_cal->map_data.dma_buf == NULL) {
 		/*Minimal chunk size is 4K*/
 		tfa_cal->map_data.map_size = SZ_4K;
-		result = msm_audio_ion_alloc("tfa_cal", &(tfa_cal->map_data.ion_client),
-				&(tfa_cal->map_data.ion_handle), tfa_cal->map_data.map_size,
-				&(tfa_cal->cal_data.paddr), &len,
-				&(tfa_cal->cal_data.kvaddr));
+		result = msm_audio_ion_alloc(&tfa_cal->map_data.dma_buf,
+				tfa_cal->map_data.map_size,
+				&tfa_cal->cal_data.paddr, &len,
+				&tfa_cal->cal_data.kvaddr);
 		if (result < 0) {
 			pr_err("%s: allocate buffer failed! ret = %d\n",
 				__func__, result);
@@ -11194,13 +11197,13 @@ int send_tfa_cal_apr(void *buf, int cmd_size, bool bRead)
 		goto err;
 	}
 
-	if (cmd_size > (SZ_4K - sizeof(struct afe_port_param_data_v2))) {
+	if (cmd_size > (SZ_4K - sizeof(struct param_hdr_v1))) {
 		pr_err("%s: Invalid payload size = %d\n", __func__, cmd_size);
 		result = -EINVAL;
 		goto err;
 	}
 
-	pdata = (struct afe_port_param_data_v2 *)tfa_cal->cal_data.kvaddr;
+	pdata = (struct param_hdr_v1 *)tfa_cal->cal_data.kvaddr;
        
 	pdata->module_id = 0x1000B911;
 	pdata->param_size = cmd_size;
@@ -11220,12 +11223,13 @@ int send_tfa_cal_apr(void *buf, int cmd_size, bool bRead)
 				((u8 *)apr_msg + sizeof(struct apr_hdr));
 
 		afe_set_apr_msg->port_id = port_id;
-		afe_set_apr_msg->payload_size = cmd_size + sizeof(struct afe_port_param_data_v2);
-		afe_set_apr_msg->payload_address_lsw =
+		afe_set_apr_msg->payload_size = cmd_size + sizeof(struct param_hdr_v1);
+		afe_set_apr_msg->mem_hdr.data_payload_addr_lsw =
 			lower_32_bits(tfa_cal->cal_data.paddr);
-		afe_set_apr_msg->payload_address_msw =
+		afe_set_apr_msg->mem_hdr.data_payload_addr_msw =
 			msm_audio_populate_upper_32_bits(tfa_cal->cal_data.paddr);
-		afe_set_apr_msg->mem_map_handle = tfa_cal->map_data.map_handle;
+		afe_set_apr_msg->mem_hdr.mem_map_handle =
+			tfa_cal->map_data.map_handle;
 
 		apr_msg_size = sizeof(struct apr_hdr) +
 				sizeof(struct afe_port_cmd_set_param_v2);
@@ -11245,11 +11249,12 @@ int send_tfa_cal_apr(void *buf, int cmd_size, bool bRead)
 		afe_get_apr_msg->module_id = 0x1000B911;
 		afe_get_apr_msg->param_id = 0x1000B922;
 
-		afe_get_apr_msg->payload_address_lsw =
+		afe_get_apr_msg->mem_hdr.data_payload_addr_lsw =
 			lower_32_bits(tfa_cal->cal_data.paddr);
-		afe_get_apr_msg->payload_address_msw =
+		afe_get_apr_msg->mem_hdr.data_payload_addr_msw =
 			msm_audio_populate_upper_32_bits(tfa_cal->cal_data.paddr);
-		afe_get_apr_msg->mem_map_handle = tfa_cal->map_data.map_handle;
+		afe_get_apr_msg->mem_hdr.mem_map_handle =
+			tfa_cal->map_data.map_handle;
                
 		apr_msg_size = sizeof(struct apr_hdr) +
 				sizeof(struct afe_port_cmd_get_param_v2);
@@ -11292,8 +11297,8 @@ int send_tfa_cal_apr(void *buf, int cmd_size, bool bRead)
 	}
 
 	if (opcode == AFE_PORT_CMD_GET_PARAM_V2) {
-		struct afe_port_param_data_v2 *get_resp;
-		get_resp = (struct afe_port_param_data_v2 *)
+		struct param_hdr_v1 *get_resp;
+		get_resp = (struct param_hdr_v1 *)
 				tfa_cal->cal_data.kvaddr;
 
 		if (get_resp->param_size > cmd_size) {
