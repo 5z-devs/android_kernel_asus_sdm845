@@ -841,7 +841,7 @@ void asus_legacy_det_work(struct work_struct *work)
 {
     struct smb_charger * chg = &chip_dev->chg;
 
-	cancel_work(&chg->legacy_detection_work);
+	cancel_work_sync(&chg->legacy_detection_work);
 	schedule_work(&chg->legacy_detection_work);
 }
 #define	SMARTCHG_STOP_CHG_PROC_FILE "driver/smartchg_stop_chg"
