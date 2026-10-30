@@ -10,6 +10,9 @@
 #include <linux/proc_fs.h>
 #include <linux/qpnp/qpnp-adc.h>
 #include <linux/extcon.h>
+#include <linux/extcon-provider.h>
+#include <linux/fs.h>
+#include <linux/namei.h>
 #include <linux/syscalls.h>
 #include <linux/reboot.h>
 #include <linux/rtc.h>
@@ -19,9 +22,10 @@
 
 static struct qpnp_adc_tm_chip *g_adc_tm_dev;
 static struct qpnp_adc_tm_btm_param g_adc_param;
-struct extcon_dev water_detect_dev;
-struct extcon_dev battery_version_dev;
-struct extcon_dev battery_id_dev;
+struct extcon_dev *water_detect_dev;
+struct extcon_dev *battery_version_dev;
+struct extcon_dev *battery_id_dev;
+static struct iio_channel *g_water_chan;
 static int g_wp_state, g_liquid_state, g_wmsg_state;
 static int low_thr_det, high_thr_det_1, high_thr_det_2, liquid_high_bound, liquid_low_bound;
 bool g_wp_enable = false;
@@ -65,8 +69,7 @@ struct CYCLE_COUNT_DATA g_cycle_count_data = {
 };
 
 struct delayed_work check_water_proof_work;
-extern int fg_bp_params_config(struct fg_chip *chip);
-extern void fg_notify_charger(struct fg_chip *chip);
+extern int fg_bp_params_config(struct fg_dev *chip);
 
 static const unsigned int vbus_liquid_ext_supported_cable[] = {
 	EXTCON_NONE,
@@ -77,6 +80,35 @@ static const unsigned int battery_version_ext_supported_cable[] = {
 static const unsigned int battery_id_ext_supported_cable[] = {
 	EXTCON_NONE,
 };
+
+/* The extcon devices are allocated at registration time and may be absent */
+static void asus_extcon_set_state(struct extcon_dev *edev, int state)
+{
+	if (edev)
+		extcon_set_state_sync_asus(edev, state);
+}
+
+/*
+ * The legacy qpnp VADC API is gone; read the water detection channel (PMIC
+ * GPIO12) through IIO instead. Returns the processed value, or a negative
+ * errno.
+ */
+static int asus_read_water_adc(int *val)
+{
+	if (!g_fgChip)
+		return -ENODEV;
+
+	if (!g_water_chan) {
+		struct iio_channel *chan;
+
+		chan = iio_channel_get(g_fgChip->dev, "water-detection");
+		if (IS_ERR(chan))
+			return PTR_ERR(chan);
+		g_water_chan = chan;
+	}
+
+	return iio_read_channel_processed(g_water_chan, val);
+}
 
 //ASUS BSP +++
 int record_magic[]={
@@ -92,7 +124,7 @@ int record_pos[]={
 };
 //ASUS BSP ---
 
-int setup_vadc_monitor(struct fg_chip *chip);
+int setup_vadc_monitor(struct fg_dev *chip);
 
 /* enum qpnp_state_request:
  * 0 - ADC_TM_HIGH_THR_ENABLE/ADC_TM_COOL_THR_ENABLE
@@ -120,7 +152,7 @@ static ssize_t vadc_enable_proc_write(struct file *filp, const char __user *buff
 		g_adc_param.state_request = ADC_TM_HIGH_LOW_THR_DISABLE;// 5
 		g_wp_enable = false;
 		if (g_ready_to_report_1 || g_charger_mode)
-			extcon_set_state_sync(&water_detect_dev, 0, 0);
+			asus_extcon_set_state(water_detect_dev, 0);
 	}
 
 	/* Get the ADC device instance (one time) */
@@ -421,18 +453,14 @@ static void create_liquid_low_bound_proc_file(void)
 //ASUS_BSP LiJen config PMIC GPIO12 to ADC channel +++
 static int water_detection_adc_proc_file_proc_read(struct seq_file *buf, void *v)
 {
-	int result = 0, err=0;
-	struct qpnp_vadc_chip *vadc_dev;
-	struct qpnp_vadc_result adc_result;
-	int32_t adc;
+	int result = 0, err = 0;
+	int adc = 0;
 
-	vadc_dev = qpnp_get_vadc(g_fgChip->dev, "water-detection");
-	if (IS_ERR(vadc_dev)) {
-		BAT_DBG("%s: qpnp_get_vadc failed\n", __func__);
+	err = asus_read_water_adc(&adc);
+	if (err) {
+		BAT_DBG("%s: water-detection adc read failed(%d)\n", __func__, err);
 		result = 0;
-	}else{
-		err = qpnp_vadc_read(vadc_dev, VADC_AMUX5_GPIO_PU3, &adc_result); //Read the GPIO12 VADC channel with 1:1 scaling
-		adc = (int) adc_result.physical;
+	} else {
 		//adc = adc / 1000; /* uV to mV */
 		BAT_DBG("%s: adc=%d\n", __func__, adc);
 		result = adc;
@@ -544,20 +572,14 @@ static void create_wmsg_state_proc_file(void)
 
 //ASUS_BSP LiJen config PMIC GPIO12 VADC_BTM channel +++
 static int32_t get_vadc_voltage(void){
-	struct qpnp_vadc_chip *vadc_dev;
-	struct qpnp_vadc_result adc_result;
-	int32_t adc;
+	int adc = 0;
 
-	vadc_dev = qpnp_get_vadc(g_fgChip->dev, "water-detection");
-	if (IS_ERR(vadc_dev)) {
-		BAT_DBG("%s: qpnp_get_vadc failed\n", __func__);
+	if (asus_read_water_adc(&adc)) {
+		BAT_DBG("%s: water-detection adc read failed\n", __func__);
 		return -1;
-	}else{
-		qpnp_vadc_read(vadc_dev, VADC_AMUX5_GPIO_PU3, &adc_result); //Read the GPIO12 VADC channel with 1:1 scaling
-		adc = (int) adc_result.physical;
-		//adc = adc / 1000; /* uV to mV */
-		BAT_DBG("%s: adc=%d\n", __func__, adc);
 	}
+	//adc = adc / 1000; /* uV to mV */
+	BAT_DBG("%s: adc=%d\n", __func__, adc);
 
 	return adc;
 }
@@ -625,7 +647,7 @@ bool double_check_is_liquid_mode(int32_t adc)
 	return ret;
 }
 
-int setup_vadc_monitor(struct fg_chip *chip)
+int setup_vadc_monitor(struct fg_dev *chip)
 {
 	int rc=0;
 	int32_t adc;
@@ -669,12 +691,12 @@ restart:
     if (g_wp_enable) {
         // set state
         if (g_ready_to_report_1 || g_charger_mode)
-			extcon_set_state_sync(&water_detect_dev, 0, g_wmsg_state);
+			asus_extcon_set_state(water_detect_dev, g_wmsg_state);
     }
 
 	pr_err("%s adc(%d), g_wp_state(%d), low_thr(%d), high_thr(%d), state_request(%d)\n", __func__, adc, g_wp_state, g_adc_param.low_thr, g_adc_param.high_thr, g_adc_param.state_request);
 	g_adc_param.channel = 0x76;
-	g_adc_param.timer_interval = ADC_MEAS2_INTERVAL_1S;
+	g_adc_param.timer_interval = ADC_MEAS1_INTERVAL_1S;
 	g_adc_param.btm_ctx = chip;
 	g_adc_param.threshold_notification = vadc_notification;
 	rc = qpnp_adc_tm_channel_measure(g_adc_tm_dev, &g_adc_param);
@@ -699,14 +721,14 @@ void asus_check_water_proof_work(struct work_struct *work)
 		g_ready_to_report_1 = true;
         printk("[BAT][CHG] water_proof: boot completed, g_wmsg_state status = %d\n", g_wmsg_state);
 		// report the event to UI when ims ready
-		extcon_set_state_sync(&water_detect_dev, 0, g_wmsg_state);
+		asus_extcon_set_state(water_detect_dev, g_wmsg_state);
     } else {
         schedule_delayed_work(&check_water_proof_work, msecs_to_jiffies(5000));
         printk("[BAT][CHG] water_proof: boot NOT completed yet, retry 5s\n");
     }
 }
 
-void asus_water_detection_init(struct fg_chip *chip)
+void asus_water_detection_init(struct fg_dev *chip)
 {
 	int rc=0;
 	g_adc_param.low_thr = 1100000;//uv
@@ -721,12 +743,17 @@ void asus_water_detection_init(struct fg_chip *chip)
 
 	if(g_wp_enable){ //disable water detection default
 		BAT_DBG("%s: enter\n", __func__);
-		water_detect_dev.supported_cable = vbus_liquid_ext_supported_cable;
-		water_detect_dev.name = "vbus_liquid";
-		dev_set_name(&water_detect_dev.dev, "vbus_liquid");
-		rc = extcon_dev_register(&water_detect_dev);
+		water_detect_dev = devm_extcon_dev_allocate(chip->dev,
+						vbus_liquid_ext_supported_cable);
+		if (IS_ERR(water_detect_dev)) {
+			pr_err("vbus liquid allocation failed");
+			water_detect_dev = NULL;
+			return;
+		}
+		rc = devm_extcon_dev_register(chip->dev, water_detect_dev);
 		if (rc) {
 			pr_err("vbus liquid registration failed");
+			water_detect_dev = NULL;
 			return;
 		}
 
@@ -742,16 +769,21 @@ void asus_water_detection_init(struct fg_chip *chip)
 	}
 }
 
-void asus_battery_version_init(void)
+void asus_battery_version_init(struct fg_dev *chip)
 {
     int rc = 0;
 
-    battery_version_dev.supported_cable = battery_version_ext_supported_cable;
-    battery_version_dev.name = "C11Pxxxx";
-    dev_set_name(&battery_version_dev.dev, "battery");
-    rc = extcon_dev_register(&battery_version_dev);
+    battery_version_dev = devm_extcon_dev_allocate(chip->dev,
+                                    battery_version_ext_supported_cable);
+    if (IS_ERR(battery_version_dev)) {
+        pr_err("battery version allocation failed");
+        battery_version_dev = NULL;
+        return;
+    }
+    rc = devm_extcon_dev_register(chip->dev, battery_version_dev);
     if (rc) {
         pr_err("battery version registration failed");
+        battery_version_dev = NULL;
     }
 }
 
@@ -776,28 +808,33 @@ void asus_set_battery_version(void)
     memset(g_battery_version, 0, sizeof(g_battery_version));
     snprintf(g_battery_version, sizeof(g_battery_version), "%s-%c-%s-%s-%s", Battery_Model_Name, Cell_Supplier_Code, battery_id, profile_version, sw_driver_version);
     printk("battery_version = %s\n", g_battery_version);
-    battery_version_dev.name = (const char *)g_battery_version;
+    /* struct extcon_dev is opaque in 4.19: the version string is kept in g_battery_version only */
 }
 
-void asus_battery_id_init(void)
+void asus_battery_id_init(struct fg_dev *chip)
 {
     int rc = 0;
 
-    battery_id_dev.supported_cable = battery_id_ext_supported_cable;
-    battery_id_dev.name = "battery_id";
-    dev_set_name(&battery_id_dev.dev, "battery_id");
-    rc = extcon_dev_register(&battery_id_dev);
+    battery_id_dev = devm_extcon_dev_allocate(chip->dev,
+                                    battery_id_ext_supported_cable);
+    if (IS_ERR(battery_id_dev)) {
+        pr_err("battery id allocation failed");
+        battery_id_dev = NULL;
+        return;
+    }
+    rc = devm_extcon_dev_register(chip->dev, battery_id_dev);
     if (rc) {
         pr_err("battery id registration failed");
+        battery_id_dev = NULL;
     }
 }
 
-void asus_check_batt_id(struct fg_chip *chip)
+void asus_check_batt_id(struct fg_dev *chip)
 {
     bool in_range = (chip->batt_id_ohms <= 56100 && chip->batt_id_ohms >= 45900);
 
     pr_info("%s: batt_id_ohms = %d, in_range = %d\n", __func__, chip->batt_id_ohms, in_range);
-    extcon_set_state_sync(&battery_id_dev, 0, in_range);
+    asus_extcon_set_state(battery_id_dev, in_range);
 }
 
 #ifdef ASUS_FACTORY_BUILD
@@ -985,44 +1022,40 @@ static int g_bootup_soc[3];
 
 static int file_op(const char *filename, loff_t offset, char *buf, int length, int operation)
 {
-	int filep = 0;
-	mm_segment_t old_fs;
-	int rc = 0;
+	struct file *filp;
+	loff_t pos = offset;
+	ssize_t ret;
+	int flags;
 
-	old_fs = get_fs();
-	set_fs(KERNEL_DS);
-
-	if(FILE_OP_READ == operation)
-		filep= sys_open(filename, O_RDONLY|O_CREAT, 0666);
-	else if(FILE_OP_WRITE == operation)
-		filep= sys_open(filename, O_RDWR|O_CREAT, 0666);
-	else {
+	if (FILE_OP_READ == operation) {
+		flags = O_RDONLY | O_CREAT;
+	} else if (FILE_OP_WRITE == operation) {
+		flags = O_RDWR | O_CREAT;
+	} else {
 		pr_err("Unknown partition op err!\n");
-		rc = -1;
-		goto INVALID_PARAM;
+		return -1;
 	}
-	if(filep < 0) {
-		pr_err("open %s err! error code:%d\n", filename, filep);
-		rc = -2;
-		goto OUT;
-	}
-    else
-        pr_info("open %s success!\n", filename);
 
-	sys_lseek(filep, offset, SEEK_SET);
-	if(FILE_OP_READ == operation)
-		sys_read(filep, buf, length);
-	else if(FILE_OP_WRITE == operation) {
-		sys_write(filep, buf, length);
-		sys_fsync(filep);
+	filp = filp_open(filename, flags, 0666);
+	if (IS_ERR(filp)) {
+		pr_err("open %s err! error code:%ld\n", filename, PTR_ERR(filp));
+		return -2;
 	}
-	rc = length;
-OUT:
-	sys_close(filep);
-INVALID_PARAM:
-	set_fs(old_fs);
+	pr_info("open %s success!\n", filename);
 
-	return rc;
+	if (FILE_OP_READ == operation) {
+		ret = kernel_read(filp, buf, length, &pos);
+	} else {
+		ret = kernel_write(filp, buf, length, &pos);
+		vfs_fsync(filp, 0);
+	}
+	if (ret < 0)
+		pr_err("%s %s err! error code:%zd\n",
+			FILE_OP_READ == operation ? "read" : "write", filename, ret);
+
+	filp_close(filp, NULL);
+
+	return length;
 }
 
 #define BAT_CONDITON_FILE_NAME "/asdf/Batpercentage"
@@ -1127,13 +1160,17 @@ int asus_batt_cycle_count_init(void)
 
 int check_apd_file_ok(void)
 {
+	struct path path;
 	int rc;
 
-	rc = (int)sys_access("/APD", 0);
-	if(rc < 0){
+	rc = kern_path("/APD", LOOKUP_FOLLOW, &path);
+	if (rc < 0) {
 		pr_err("APD partion is not ok!\n");
+		return rc;
 	}
-	return rc;
+	path_put(&path);
+
+	return 0;
 }
 
 static int backup_bat_safety(void)
@@ -1190,7 +1227,7 @@ static int write_back_cycle_count_data(void)
     return rc;
 }
 
-int asus_update_cycle_count(struct fg_chip *chip)
+int asus_update_cycle_count(struct fg_dev *chip)
 {
 	static int last_soc[3] = {-1, -1, -1};
 	int cur_soc[3] = {-1, -1, -1};
@@ -1271,7 +1308,7 @@ int asus_update_cycle_count(struct fg_chip *chip)
 	return 0;
 }
 
-static void asus_update_fv_vf(struct fg_chip *chip, int float_volt_uv, int vbatt_full_mv)
+static void asus_update_fv_vf(struct fg_dev *chip, int float_volt_uv, int vbatt_full_mv)
 {
     chip->bp.float_volt_uv = float_volt_uv;
     chip->bp.vbatt_full_mv = vbatt_full_mv;
@@ -1345,11 +1382,11 @@ static void calculation_time_fun(int type)
     }
 }
 
-extern int asus_clear_reload_battery_profile(struct fg_chip *chip);
+extern int asus_clear_reload_battery_profile(struct fg_dev *chip);
 void asus_batt_safety_upgrade_work(struct work_struct *work)
 {
-    struct fg_chip *chip = container_of(work,
-            struct fg_chip, safety_upgrade_work.work);
+    struct fg_dev *chip = container_of(work,
+            struct fg_dev, safety_upgrade_work.work);
     union power_supply_propval prop = {0, };
     int rc;
     int pre_condition, new_condition;
@@ -1512,6 +1549,7 @@ out:
 		if(rc < 0){
 			goto WORK;
 		}
+		backup_bat_safety();
 	}
 
 WORK:
@@ -1523,7 +1561,7 @@ WORK:
     }
 }
 
-static void asus_battery_safety_init(struct fg_chip *chip)
+static void asus_battery_safety_init(struct fg_dev *chip)
 {
     BAT_DBG("%s: enter\n", __func__);
     chip->safety_upgrade_cond.condition1_battery_time = BATTERY_USE_TIME_CONDITION1;
@@ -1606,12 +1644,17 @@ static ssize_t batt_condition_value_proc_write(struct file *filp, const char __u
     int type = 0;
     unsigned long condition1_time = 0;
     unsigned long condition2_time = 0;
-    char buf[len];
+    char buf[128];
     char *start = buf;
 
     if(!g_fgChip){
         pr_err("g_fgChip is NULL!");
         return len;
+    }
+
+    if (len < 2 || len > sizeof(buf)) {
+        pr_err("Invalid input length %zu\n", len);
+        return -EINVAL;
     }
 
     if (copy_from_user(buf, buff, len-1)) {
@@ -1621,9 +1664,15 @@ static ssize_t batt_condition_value_proc_write(struct file *filp, const char __u
     buf[len-1] = 0;
 
     sscanf(start, "%d", &type);
-    while (*start++ != ' ');
+    start = strchr(start, ' ');
+    if (!start)
+        return -EINVAL;
+    start++;
     sscanf(start, "%lu", &condition1_time);
-    while (*start++ != ' ');
+    start = strchr(start, ' ');
+    if (!start)
+        return -EINVAL;
+    start++;
     sscanf(start, "%lu", &condition2_time);
 
     if (type && condition2_time <= condition1_time) {
@@ -1911,7 +1960,7 @@ void asus_procfs_create(void)
 #endif
 }
 
-void asus_fg_init_config(struct fg_chip *chip)
+void asus_fg_init_config(struct fg_dev *chip)
 {
     int rc;
     u8	batt_aux_therm_coeffs[3] = {0xB6, 0x2D, 0xE5};
@@ -1945,10 +1994,10 @@ static struct notifier_block reboot_blk = {
 	.notifier_call	= reboot_shutdown_prep,
 };
 
-int asus_fg_porting(struct fg_chip *chip)
+int asus_fg_porting(struct fg_dev *chip)
 {
 	if(!chip){
-		BAT_DBG_E("struct fg_chip is NULL,Now will return!\n");
+		BAT_DBG_E("struct fg_dev is NULL,Now will return!\n");
 		return -1;
 	}
 BAT_DBG("%s: enter\n", __func__);
@@ -1959,8 +2008,8 @@ BAT_DBG("%s: enter\n", __func__);
 	register_reboot_notifier(&reboot_blk);
 
 	asus_water_detection_init(chip);
-	asus_battery_version_init();
-	asus_battery_id_init();
+	asus_battery_version_init(chip);
+	asus_battery_id_init(chip);
 
 	asus_procfs_create();
 
@@ -2114,12 +2163,12 @@ void asus_check_rconn(void)
 		}
 		else if(ret == 0)
 		{
-			if(rconn != g_fgChip->dt.rconn_mohms)
+			if(rconn != asus_fg_get_rconn_mohms(g_fgChip))
 			{
 				if (g_fgChip->asus_profile_changed) {
 					g_fgChip->asus_profile_changed = 0;
 					printk("[BAT] profile reloaded, no need to update rconn again\n");
-					asus_set_RCONN_RECORED(g_fgChip->dt.rconn_mohms);
+					asus_set_RCONN_RECORED(asus_fg_get_rconn_mohms(g_fgChip));
 					return;
 				}
 				printk("[BAT] rconn need to update \n");
@@ -2137,12 +2186,12 @@ void asus_check_rconn(void)
 	}
 	else
 	{
-		printk("[BAT]fail to read rconn,just do it next boot time,g_fgChip/g_fgChip->dt.rconn_mohms\n");
+		printk("[BAT]fail to read rconn,just do it next boot time,g_fgChip/asus_fg_get_rconn_mohms(g_fgChip)\n");
 	}
 
 }
 
-void asus_check_full_pending(struct fg_chip *chip, int ibatt_now, int msoc)
+void asus_check_full_pending(struct fg_dev *chip, int ibatt_now, int msoc)
 {
     int pending_state = 0;
     static struct timespec release_start_time = {.tv_sec = 0, .tv_nsec = 0,};
