@@ -78,7 +78,7 @@ static void fts_release_all_finger(void);
 static int fts_ts_suspend(struct device *dev);
 static int fts_ts_resume(struct device *dev);
 //add wake lock +++
-static struct wakeup_source fts_wakelock;
+static struct wakeup_source *fts_wakelock;
 #define WAKELOCK_HOLD_TIME 200
 //add wake lock ---
 //<ASUS-BSP> add touch test node ++++++
@@ -1010,7 +1010,7 @@ static irqreturn_t fts_ts_interrupt(int irq, void *data)
 #endif
 
     //add wake lock
-    __pm_wakeup_event(&fts_wakelock, WAKELOCK_HOLD_TIME);
+    __pm_wakeup_event(fts_wakelock, WAKELOCK_HOLD_TIME);
 
     ret = fts_read_touchdata(ts_data);
     if (ret == 0) {
@@ -1633,7 +1633,9 @@ static int fts_ts_probe(struct i2c_client *client, const struct i2c_device_id *i
     register_early_suspend(&ts_data->early_suspend);
 #endif
 	//add wake lock
-    wakeup_source_init(&fts_wakelock, "fts_wakelock");
+    fts_wakelock = wakeup_source_register(&client->dev, "fts_wakelock");
+    if (!fts_wakelock)
+        FTS_ERROR("failed to register fts_wakelock wakeup source");
     FTS_FUNC_EXIT();
     return 0;
 
@@ -1688,7 +1690,8 @@ static int fts_ts_remove(struct i2c_client *client)
 
     FTS_FUNC_ENTER();
     //add wake lock
-    wakeup_source_trash(&fts_wakelock);
+    wakeup_source_unregister(fts_wakelock);
+    fts_wakelock = NULL;
 #if FTS_POINT_REPORT_CHECK_EN
     fts_point_report_check_exit(ts_data);
 #endif
