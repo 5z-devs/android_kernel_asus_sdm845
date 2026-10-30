@@ -24,8 +24,8 @@
 
 #define SMB2_DEFAULT_WPWR_UW	8000000
 
-extern struct wakeup_source adc_check_lock;
-extern struct wakeup_source UsbCable_Lock;
+extern struct wakeup_source *adc_check_lock;
+extern struct wakeup_source *UsbCable_Lock;
 
 static struct smb_params v1_params = {
 	.fcc			= {
@@ -2688,8 +2688,10 @@ static int smb2_remove(struct platform_device *pdev)
 	sysfs_remove_groups(&chg->dev->kobj, smb2_groups);
 	debugfs_remove_recursive(chip->dfs_root);
 	platform_set_drvdata(pdev, NULL);
-	wakeup_source_trash(&adc_check_lock);
-	wakeup_source_trash(&UsbCable_Lock);
+	wakeup_source_unregister(adc_check_lock);
+	adc_check_lock = NULL;
+	wakeup_source_unregister(UsbCable_Lock);
+	UsbCable_Lock = NULL;
 	return 0;
 }
 
