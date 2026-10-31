@@ -365,6 +365,10 @@ static void *usbpd_ipc_log;
 #define PD_MIN_SINK_CURRENT	500
 
 //static const u32 default_src_caps[] = { 0x36019096 };	/* VSafe5V @ 1.5A */
+/* If set, do not downgrade to PD 2.0 when the source has no PPS APDO */
+static bool rev3_sink_only;
+module_param(rev3_sink_only, bool, 0600);
+
 static const u32 default_src_caps[] = { 0x36019032 };	/* VSafe5V @ 0.5A */
 static const u32 default_snk_caps[] = { 0x2601912C };	/* VSafe5V @ 3A */
 
