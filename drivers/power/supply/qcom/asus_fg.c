@@ -1549,6 +1549,7 @@ out:
 		if(rc < 0){
 			goto WORK;
 		}
+		backup_bat_safety();
 	}
 
 WORK:
