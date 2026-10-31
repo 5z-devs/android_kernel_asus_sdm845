@@ -8,6 +8,7 @@
 #include <linux/sort.h>
 #include "fg-core.h"
 #include "fg-reg.h"
+#include "asus_fg.h"
 
 /* 3 byte address + 1 space character */
 #define ADDR_LEN			4
@@ -920,9 +921,9 @@ int fg_get_msoc(struct fg_dev *fg, int *msoc)
 
 	if(g_asus_get_once && *msoc==100)
 	{
-		printk("[ASUS][FG] go to schedule chip->asus_check_full_work\n");
-		cancel_delayed_work(&chip->asus_check_full_work);
-		schedule_delayed_work(&chip->asus_check_full_work,msecs_to_jiffies(100));
+		printk("[ASUS][FG] go to schedule fg->asus_check_full_work\n");
+		cancel_delayed_work(&fg->asus_check_full_work);
+		schedule_delayed_work(&fg->asus_check_full_work, msecs_to_jiffies(100));
 	}
 	else if(g_asus_get_once)
 	{
