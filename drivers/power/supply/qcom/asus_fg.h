@@ -12,6 +12,7 @@ struct fg_dev;
 #define FAKE_TEMP_INIT	180
 
 int asus_fg_porting(struct fg_dev *chip);
+int asus_fg_get_rconn_mohms(struct fg_dev *fg);
 void asus_set_battery_version(void);
 void asus_check_batt_id(struct fg_dev *chip);
 

@@ -10,6 +10,9 @@
 #include <linux/proc_fs.h>
 #include <linux/qpnp/qpnp-adc.h>
 #include <linux/extcon.h>
+#include <linux/extcon-provider.h>
+#include <linux/fs.h>
+#include <linux/namei.h>
 #include <linux/syscalls.h>
 #include <linux/reboot.h>
 #include <linux/rtc.h>
@@ -1019,44 +1022,40 @@ static int g_bootup_soc[3];
 
 static int file_op(const char *filename, loff_t offset, char *buf, int length, int operation)
 {
-	int filep = 0;
-	mm_segment_t old_fs;
-	int rc = 0;
+	struct file *filp;
+	loff_t pos = offset;
+	ssize_t ret;
+	int flags;
 
-	old_fs = get_fs();
-	set_fs(KERNEL_DS);
-
-	if(FILE_OP_READ == operation)
-		filep= sys_open(filename, O_RDONLY|O_CREAT, 0666);
-	else if(FILE_OP_WRITE == operation)
-		filep= sys_open(filename, O_RDWR|O_CREAT, 0666);
-	else {
+	if (FILE_OP_READ == operation) {
+		flags = O_RDONLY | O_CREAT;
+	} else if (FILE_OP_WRITE == operation) {
+		flags = O_RDWR | O_CREAT;
+	} else {
 		pr_err("Unknown partition op err!\n");
-		rc = -1;
-		goto INVALID_PARAM;
+		return -1;
 	}
-	if(filep < 0) {
-		pr_err("open %s err! error code:%d\n", filename, filep);
-		rc = -2;
-		goto OUT;
-	}
-    else
-        pr_info("open %s success!\n", filename);
 
-	sys_lseek(filep, offset, SEEK_SET);
-	if(FILE_OP_READ == operation)
-		sys_read(filep, buf, length);
-	else if(FILE_OP_WRITE == operation) {
-		sys_write(filep, buf, length);
-		sys_fsync(filep);
+	filp = filp_open(filename, flags, 0666);
+	if (IS_ERR(filp)) {
+		pr_err("open %s err! error code:%ld\n", filename, PTR_ERR(filp));
+		return -2;
 	}
-	rc = length;
-OUT:
-	sys_close(filep);
-INVALID_PARAM:
-	set_fs(old_fs);
+	pr_info("open %s success!\n", filename);
 
-	return rc;
+	if (FILE_OP_READ == operation) {
+		ret = kernel_read(filp, buf, length, &pos);
+	} else {
+		ret = kernel_write(filp, buf, length, &pos);
+		vfs_fsync(filp, 0);
+	}
+	if (ret < 0)
+		pr_err("%s %s err! error code:%zd\n",
+			FILE_OP_READ == operation ? "read" : "write", filename, ret);
+
+	filp_close(filp, NULL);
+
+	return length;
 }
 
 #define BAT_CONDITON_FILE_NAME "/asdf/Batpercentage"
@@ -1161,13 +1160,17 @@ int asus_batt_cycle_count_init(void)
 
 int check_apd_file_ok(void)
 {
+	struct path path;
 	int rc;
 
-	rc = (int)sys_access("/APD", 0);
-	if(rc < 0){
+	rc = kern_path("/APD", LOOKUP_FOLLOW, &path);
+	if (rc < 0) {
 		pr_err("APD partion is not ok!\n");
+		return rc;
 	}
-	return rc;
+	path_put(&path);
+
+	return 0;
 }
 
 static int backup_bat_safety(void)
@@ -1640,12 +1643,17 @@ static ssize_t batt_condition_value_proc_write(struct file *filp, const char __u
     int type = 0;
     unsigned long condition1_time = 0;
     unsigned long condition2_time = 0;
-    char buf[len];
+    char buf[128];
     char *start = buf;
 
     if(!g_fgChip){
         pr_err("g_fgChip is NULL!");
         return len;
+    }
+
+    if (len < 2 || len > sizeof(buf)) {
+        pr_err("Invalid input length %zu\n", len);
+        return -EINVAL;
     }
 
     if (copy_from_user(buf, buff, len-1)) {
@@ -1655,9 +1663,15 @@ static ssize_t batt_condition_value_proc_write(struct file *filp, const char __u
     buf[len-1] = 0;
 
     sscanf(start, "%d", &type);
-    while (*start++ != ' ');
+    start = strchr(start, ' ');
+    if (!start)
+        return -EINVAL;
+    start++;
     sscanf(start, "%lu", &condition1_time);
-    while (*start++ != ' ');
+    start = strchr(start, ' ');
+    if (!start)
+        return -EINVAL;
+    start++;
     sscanf(start, "%lu", &condition2_time);
 
     if (type && condition2_time <= condition1_time) {
@@ -2148,12 +2162,12 @@ void asus_check_rconn(void)
 		}
 		else if(ret == 0)
 		{
-			if(rconn != g_fgChip->dt.rconn_mohms)
+			if(rconn != asus_fg_get_rconn_mohms(g_fgChip))
 			{
 				if (g_fgChip->asus_profile_changed) {
 					g_fgChip->asus_profile_changed = 0;
 					printk("[BAT] profile reloaded, no need to update rconn again\n");
-					asus_set_RCONN_RECORED(g_fgChip->dt.rconn_mohms);
+					asus_set_RCONN_RECORED(asus_fg_get_rconn_mohms(g_fgChip));
 					return;
 				}
 				printk("[BAT] rconn need to update \n");
@@ -2171,7 +2185,7 @@ void asus_check_rconn(void)
 	}
 	else
 	{
-		printk("[BAT]fail to read rconn,just do it next boot time,g_fgChip/g_fgChip->dt.rconn_mohms\n");
+		printk("[BAT]fail to read rconn,just do it next boot time,g_fgChip/asus_fg_get_rconn_mohms(g_fgChip)\n");
 	}
 
 }
