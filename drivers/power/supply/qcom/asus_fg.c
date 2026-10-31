@@ -20,7 +20,6 @@
 #include "fg-reg.h"
 #include "asus_fg.h"
 
-static struct qpnp_adc_tm_chip *g_adc_tm_dev;
 static struct qpnp_adc_tm_btm_param g_adc_param;
 struct extcon_dev *water_detect_dev;
 struct extcon_dev *battery_version_dev;
@@ -110,6 +109,120 @@ static int asus_read_water_adc(int *val)
 	return iio_read_channel_processed(g_water_chan, val);
 }
 
+/*
+ * The legacy qpnp ADC TM driver (qpnp_get_adc_tm()/qpnp_adc_tm_channel_measure())
+ * is not available anymore. Emulate its threshold monitoring for the water
+ * detection channel by polling the IIO channel once per second and calling
+ * the registered notification when a threshold is crossed.
+ */
+#define ASUS_VADC_POLL_MS	1000
+
+static bool g_vadc_mon_high;
+static bool g_vadc_mon_low;
+static void asus_vadc_monitor_fn(struct work_struct *work);
+static DECLARE_DELAYED_WORK(asus_vadc_monitor_work, asus_vadc_monitor_fn);
+
+static void asus_vadc_monitor_fn(struct work_struct *work)
+{
+	enum qpnp_tm_state state = ADC_TM_HIGH_STATE;
+	bool hit = false;
+	int adc;
+
+	if (!g_vadc_mon_high && !g_vadc_mon_low)
+		return;
+
+	if (!asus_read_water_adc(&adc)) {
+		if (g_vadc_mon_high && adc >= g_adc_param.high_thr) {
+			hit = true;
+			state = ADC_TM_HIGH_STATE;
+		} else if (g_vadc_mon_low && adc <= g_adc_param.low_thr) {
+			hit = true;
+			state = ADC_TM_LOW_STATE;
+		}
+	}
+
+	if (!hit) {
+		schedule_delayed_work(&asus_vadc_monitor_work,
+				msecs_to_jiffies(ASUS_VADC_POLL_MS));
+		return;
+	}
+
+	/* One-shot like the hardware monitor: the callback re-arms it. */
+	g_vadc_mon_high = false;
+	g_vadc_mon_low = false;
+	if (g_adc_param.threshold_notification)
+		g_adc_param.threshold_notification(state,
+						g_adc_param.btm_ctx);
+}
+
+static int asus_vadc_tm_measure(struct qpnp_adc_tm_btm_param *param)
+{
+	switch (param->state_request) {
+	case ADC_TM_HIGH_THR_ENABLE:
+		g_vadc_mon_high = true;
+		g_vadc_mon_low = false;
+		break;
+	case ADC_TM_LOW_THR_ENABLE:
+		g_vadc_mon_high = false;
+		g_vadc_mon_low = true;
+		break;
+	case ADC_TM_HIGH_LOW_THR_ENABLE:
+		g_vadc_mon_high = true;
+		g_vadc_mon_low = true;
+		break;
+	case ADC_TM_HIGH_THR_DISABLE:
+		g_vadc_mon_high = false;
+		break;
+	case ADC_TM_LOW_THR_DISABLE:
+		g_vadc_mon_low = false;
+		break;
+	case ADC_TM_HIGH_LOW_THR_DISABLE:
+		g_vadc_mon_high = false;
+		g_vadc_mon_low = false;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	if (g_vadc_mon_high || g_vadc_mon_low)
+		mod_delayed_work(system_wq, &asus_vadc_monitor_work,
+				msecs_to_jiffies(ASUS_VADC_POLL_MS));
+	else
+		/* may run from the monitor work itself, so don't wait for it */
+		cancel_delayed_work(&asus_vadc_monitor_work);
+
+	return 0;
+}
+
+/* Read the PMIC RTC, in seconds since the epoch */
+int asus_qpnp_rtc_read_time(unsigned long *secs)
+{
+#ifdef CONFIG_RTC_HCTOSYS_DEVICE
+	const char *rtc_name = CONFIG_RTC_HCTOSYS_DEVICE;
+#else
+	const char *rtc_name = "rtc0";
+#endif
+	struct rtc_device *rtc;
+	struct rtc_time tm;
+	int rc;
+
+	rtc = rtc_class_open(rtc_name);
+	if (!rtc) {
+		pr_err("%s: unable to open %s\n", __func__, rtc_name);
+		return -ENODEV;
+	}
+
+	rc = rtc_read_time(rtc, &tm);
+	if (!rc)
+		*secs = (unsigned long)rtc_tm_to_time64(&tm);
+	else
+		pr_err("%s: rtc_read_time failed(%d)\n", __func__, rc);
+
+	rtc_class_close(rtc);
+
+	return rc;
+}
+
 //ASUS BSP +++
 int record_magic[]={
 	0xDCBA,
@@ -155,16 +268,9 @@ static ssize_t vadc_enable_proc_write(struct file *filp, const char __user *buff
 			asus_extcon_set_state(water_detect_dev, 0);
 	}
 
-	/* Get the ADC device instance (one time) */
-	g_adc_tm_dev = qpnp_get_adc_tm(g_fgChip->dev, "water-detection");
-	if (IS_ERR(g_adc_tm_dev)) {
-			rc = PTR_ERR(g_adc_tm_dev);
-			BAT_DBG("%s qpnp_get_adc_tm fail(%d)\n", __func__, rc);
-	}
-
-	rc = qpnp_adc_tm_channel_measure(g_adc_tm_dev, &g_adc_param);
+	rc = asus_vadc_tm_measure(&g_adc_param);
 	if (rc){
-		BAT_DBG_E("%s: qpnp_adc_tm_channel_measure fail(%d) ---\n", __func__,rc);
+		BAT_DBG_E("%s: vadc monitor setup fail(%d) ---\n", __func__,rc);
 	}
 
 	BAT_DBG("%s: enable vadc btm (%d)\n",__func__,g_adc_param.state_request);
@@ -655,13 +761,6 @@ int setup_vadc_monitor(struct fg_dev *chip)
 restart:
 	adc = get_vadc_voltage();
 
-	/* Get the ADC device instance (one time) */
-	g_adc_tm_dev = qpnp_get_adc_tm(chip->dev, "water-detection");
-	if (IS_ERR(g_adc_tm_dev)) {
-			rc = PTR_ERR(g_adc_tm_dev);
-			BAT_DBG("%s qpnp_get_adc_tm fail(%d)\n", __func__, rc);
-	}
-
 	if(adc > liquid_high_bound){ //Normal
 		g_adc_param.low_thr = low_thr_det; //uV
 		g_adc_param.state_request = ADC_TM_LOW_THR_ENABLE;
@@ -699,9 +798,9 @@ restart:
 	g_adc_param.timer_interval = ADC_MEAS1_INTERVAL_1S;
 	g_adc_param.btm_ctx = chip;
 	g_adc_param.threshold_notification = vadc_notification;
-	rc = qpnp_adc_tm_channel_measure(g_adc_tm_dev, &g_adc_param);
+	rc = asus_vadc_tm_measure(&g_adc_param);
 	if (rc){
-		BAT_DBG_E("%s: qpnp_adc_tm_channel_measure fail(%d) ---\n", __func__,rc);
+		BAT_DBG_E("%s: vadc monitor setup fail(%d) ---\n", __func__,rc);
 	}
 
 	return rc;
