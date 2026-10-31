@@ -763,6 +763,8 @@ void asus_log_chg_mode(u8 apsd_result_bit)
     default:
         break;
     }
+
+    CHG_DBG("%s: charger type = %s\n", __func__, usb_type_str[chg_type]);
 }
 
 #define SWITCH_QC_NOT_QUICK_CHARGING_10W	4
