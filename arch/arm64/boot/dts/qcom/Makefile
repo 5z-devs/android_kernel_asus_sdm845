@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0
 ifeq ($(CONFIG_BUILD_ARM64_DT_OVERLAY),y)
+	dtb-$(CONFIG_ARCH_SDM845) += sdm845-v2.dtb
 	dtbo-$(CONFIG_ARCH_SDM845) += \
 		sdm845-v2-mtp-overlay.dtbo \
 		ZS620KL-overlay.dtbo
