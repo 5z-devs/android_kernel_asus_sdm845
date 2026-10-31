@@ -17,6 +17,7 @@ void asus_set_battery_version(void);
 void asus_check_batt_id(struct fg_dev *chip);
 
 extern struct fg_dev *g_fgChip;
+extern int g_asus_get_once;
 extern bool g_charger_mode;
 extern int fake_temp;
 extern int g_bat_reload_cond;
