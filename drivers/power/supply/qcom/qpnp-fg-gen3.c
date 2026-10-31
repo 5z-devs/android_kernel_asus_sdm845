@@ -212,6 +212,7 @@ struct fg_dt_props {
 	int     sync_sleep_threshold_ma;
 	int	bmd_en_delay_ms;
 	int	ki_coeff_full_soc_dischg;
+	int	ki_coeff_cutoff_soc;//ASUS_BSP
 	int	ki_coeff_hi_chg;
 	int	jeita_thresholds[NUM_JEITA_LEVELS];
 	int	ki_coeff_soc[KI_COEFF_SOC_LEVELS];
@@ -479,8 +480,6 @@ static bool fg_profile_dump;
 
 int fake_temp = FAKE_TEMP_INIT;
 
-static bool batt_psy_initialized(struct fg_chip *chip);
-
 static ssize_t profile_dump_show(struct device *dev, struct device_attribute
 				*attr, char *buf)
 {
@@ -635,7 +634,7 @@ static int fg_get_battery_temp(struct fg_dev *fg, int *val)
 }
 
 int g_asus_get_once = 1;
-static int fg_charge_full_update(struct fg_chip *chip);
+static int fg_charge_full_update(struct fg_dev *fg);
 
 static bool is_batt_empty(struct fg_dev *fg)
 {
@@ -727,7 +726,7 @@ static bool is_debug_batt_id(struct fg_dev *fg)
 #define DEBUG_BATT_SOC	67
 #define BATT_MISS_SOC	50
 #define EMPTY_SOC	0
-int fg_get_prop_capacity(struct fg_chip *chip, int *val)
+int fg_get_prop_capacity(struct fg_dev *fg, int *val)
 {
 	struct fg_gen3_chip *chip = container_of(fg, struct fg_gen3_chip, fg);
 	int rc, msoc, ibatt_now;
@@ -739,25 +738,25 @@ int fg_get_prop_capacity(struct fg_chip *chip, int *val)
 
 	if (fg->fg_restarting) {
 		*val = fg->last_soc;
-		chip->last_report_msoc = *val;//ASUS BSP +++
+		fg->last_report_msoc = *val;//ASUS BSP +++
 		return 0;
 	}
 
 	if (fg->battery_missing || !fg->soc_reporting_ready) {
-		chip->last_report_msoc = *val;//ASUS BSP +++
+		fg->last_report_msoc = *val;//ASUS BSP +++
 		*val = BATT_MISS_SOC;
 		return 0;
 	}
 
 	if (is_batt_empty(fg)) {
-		chip->last_report_msoc = *val;//ASUS BSP +++
+		fg->last_report_msoc = *val;//ASUS BSP +++
 		*val = EMPTY_SOC;
 		return 0;
 	}
 
 	if (fg->charge_full) {
 		*val = FULL_CAPACITY;
-		chip->last_report_msoc = *val;//ASUS BSP +++
+		fg->last_report_msoc = *val;//ASUS BSP +++
 		return 0;
 	}
 
@@ -766,37 +765,37 @@ int fg_get_prop_capacity(struct fg_chip *chip, int *val)
 		return rc;
 
 // ASUS BSP +++
-	rc = fg_get_battery_current(chip, &ibatt_now);
+	rc = fg_get_battery_current(fg, &ibatt_now);
 	if (rc < 0) {
 		pr_err("failed to get battery current, rc=%d\n", rc);
 	}
-	asus_check_full_pending(chip, ibatt_now, msoc);
+	asus_check_full_pending(fg, ibatt_now, msoc);
 // ASUS BSP ---
 
 	if (chip->dt.linearize_soc && fg->delta_soc > 0)
 		*val = fg->maint_soc;
-	else if (msoc == 100 && chip->asus_pending_report_full) { // ASUS BSP +++
+	else if (msoc == 100 && fg->asus_pending_report_full) { // ASUS BSP +++
 		*val = 99;
 	} else {
 		*val = msoc;
-		if (*val < 99 && chip->asus_pending_report_full) { // ASUS BSP +++
-			chip->asus_pending_report_full = 0;
-			asus_set_record(chip->asus_pending_report_full, RECORD_PENDINGFULL);
+		if (*val < 99 && fg->asus_pending_report_full) { // ASUS BSP +++
+			fg->asus_pending_report_full = 0;
+			asus_set_record(fg->asus_pending_report_full, RECORD_PENDINGFULL);
 		}
-		if (chip->asus_report_last_msoc_end_time) { // ASUS BSP: prevent report 0% when FG not ready
-			if (jiffies > chip->asus_report_last_msoc_end_time + 60*HZ) {
-				chip->asus_report_last_msoc_end_time = 0;
-				BAT_DBG("report last msoc(%d) timeout, now msoc:%d\n", chip->last_report_msoc, msoc);
-			} else if (msoc == 0 && chip->last_report_msoc >= 2) {
-				*val = chip->last_report_msoc;
-				BAT_DBG("force report last reported msoc(%d) while fg not ready!\n", chip->last_report_msoc);
+		if (fg->asus_report_last_msoc_end_time) { // ASUS BSP: prevent report 0% when FG not ready
+			if (jiffies > fg->asus_report_last_msoc_end_time + 60*HZ) {
+				fg->asus_report_last_msoc_end_time = 0;
+				BAT_DBG("report last msoc(%d) timeout, now msoc:%d\n", fg->last_report_msoc, msoc);
+			} else if (msoc == 0 && fg->last_report_msoc >= 2) {
+				*val = fg->last_report_msoc;
+				BAT_DBG("force report last reported msoc(%d) while fg not ready!\n", fg->last_report_msoc);
 			}
 		}
 	}
-	if (batt_psy_initialized(chip) && (chip->last_report_msoc != *val)) {//ASUS BSP +++
-		power_supply_changed(chip->batt_psy);//ASUS BSP +++
+	if (batt_psy_initialized(fg) && (fg->last_report_msoc != *val)) {//ASUS BSP +++
+		power_supply_changed(fg->batt_psy);//ASUS BSP +++
 	}
-	chip->last_report_msoc = *val;//ASUS BSP +++
+	fg->last_report_msoc = *val;//ASUS BSP +++
 	return 0;
 }
 
@@ -898,7 +897,7 @@ static int fg_get_batt_profile(struct fg_dev *fg)
 	} else if (g_bat_reload_cond > 0 &&
                     g_bat_reload_cond < BATT_SAFETY_UPGRADE_PARAMS_COUNT) {
         fg->bp.float_volt_uv = batt_safety_upgrade_params[g_bat_reload_cond].float_voltage_uv;
-        pr_info("use new battery float voltage : %d uV\n", chip->bp.float_volt_uv);
+        pr_info("use new battery float voltage : %d uV\n", fg->bp.float_volt_uv);
 	} else;
 
 	rc = of_property_read_u32(profile_node, "qcom,fastchg-current-ma",
@@ -915,8 +914,8 @@ static int fg_get_batt_profile(struct fg_dev *fg)
 		fg->bp.vbatt_full_mv = -EINVAL;
 	} else if (g_bat_reload_cond > 0 &&
                     g_bat_reload_cond < BATT_SAFETY_UPGRADE_PARAMS_COUNT) {
-        chip->bp.vbatt_full_mv = batt_safety_upgrade_params[g_bat_reload_cond].vbat_full_mv;
-        pr_info("use new vbatt full : %d mV\n", chip->bp.vbatt_full_mv);
+        fg->bp.vbatt_full_mv = batt_safety_upgrade_params[g_bat_reload_cond].vbat_full_mv;
+        pr_info("use new vbatt full : %d mV\n", fg->bp.vbatt_full_mv);
 	} else;
 
 	data = of_get_property(profile_node, "qcom,fg-profile-data", &len);
@@ -1670,7 +1669,7 @@ static int fg_charge_full_update(struct fg_dev *fg)
 	fg_dbg(fg, FG_STATUS, "msoc: %d bsoc: %x health: %d status: %d full: %d\n",
 		msoc, bsoc, fg->health, fg->charge_status,
 		fg->charge_full);
-	if (fg->charge_done||fg->asus_need_keep_report_full) && !fg->charge_full) {
+	if ((fg->charge_done || fg->asus_need_keep_report_full) && !fg->charge_full) {
 		if (msoc >= 99 && fg->health == POWER_SUPPLY_HEALTH_GOOD) {
 			fg_dbg(fg, FG_STATUS, "Setting charge_full to true\n");
 			printk("[FG] Setting charge_full to true. msoc: %d bsoc: %x \n",msoc, bsoc);
@@ -2524,7 +2523,7 @@ static void fg_cycle_counter_update(struct fg_dev *fg)
 	if (!chip->cyc_ctr.en)
 		return;
 		
-	asus_update_cycle_count(chip);
+	asus_update_cycle_count(fg);
 
 	mutex_lock(&chip->cyc_ctr.lock);
 	rc = fg_get_sram_prop(fg, FG_SRAM_BATT_SOC, &batt_soc);
@@ -2982,8 +2981,8 @@ static void fg_update_batt_profile(struct fg_dev *fg)
 	}
 	offset = (ESR_RSLOW_CHG_WORD - PROFILE_LOAD_WORD) * 4
 			+ ESR_RSLOW_CHG_OFFSET;
-	chip->profile_offset_esr_rslow_chg = offset;
-	chip->profile_value_esr_rslow_chg = chip->batt_profile[offset];
+	fg->profile_offset_esr_rslow_chg = offset;
+	fg->profile_value_esr_rslow_chg = chip->batt_profile[offset];
 	chip->batt_profile[offset] = val;
 
 	rc = fg_sram_read(fg, ESR_RSLOW_DISCHG_WORD,
@@ -2994,8 +2993,8 @@ static void fg_update_batt_profile(struct fg_dev *fg)
 	}
 	offset = (ESR_RSLOW_DISCHG_WORD - PROFILE_LOAD_WORD) * 4
 			+ ESR_RSLOW_DISCHG_OFFSET;
-	chip->profile_offset_esr_rslow_dischg = offset;
-	chip->profile_value_esr_rslow_dischg = chip->batt_profile[offset];
+	fg->profile_offset_esr_rslow_dischg = offset;
+	fg->profile_value_esr_rslow_dischg = chip->batt_profile[offset];
 	chip->batt_profile[offset] = val;
 }
 
@@ -3040,7 +3039,7 @@ static void profile_load_work(struct work_struct *work)
 	}
 
 	asus_set_battery_version();
-	asus_check_batt_id(chip);
+	asus_check_batt_id(fg);
 	if(!g_cyclecount_initialized) {
 		rc = asus_batt_cycle_count_init();
 		if(rc < 0){
@@ -3059,10 +3058,10 @@ static void profile_load_work(struct work_struct *work)
 	if (!fg->profile_available)
 		goto out;
 
-	chip->profile_offset_esr_rslow_chg = 0;
-	chip->profile_offset_esr_rslow_dischg = 0;
-	chip->profile_value_esr_rslow_chg = 0;
-	chip->profile_value_esr_rslow_dischg = 0;
+	fg->profile_offset_esr_rslow_chg = 0;
+	fg->profile_offset_esr_rslow_dischg = 0;
+	fg->profile_value_esr_rslow_chg = 0;
+	fg->profile_value_esr_rslow_dischg = 0;
 
 	fg_update_batt_profile(fg);
 
@@ -3076,9 +3075,9 @@ static void profile_load_work(struct work_struct *work)
 	mutex_unlock(&chip->cl.lock);
 
 // ASUS_BSP: inform asus rconn check routine
-	chip->asus_profile_changed = 1;
+	fg->asus_profile_changed = 1;
 // ASUS_BSP: restore esr_rslow to profile default before load profile +++
-	rc = fg_sram_read(chip, PROFILE_INTEGRITY_WORD,
+	rc = fg_sram_read(fg, PROFILE_INTEGRITY_WORD,
 			SW_CONFIG_OFFSET, &val, 1, FG_IMA_DEFAULT);
 	if (rc < 0) {
 		pr_err("Error in reading SW_CONFIG_OFFSET, rc=%d\n", rc);
@@ -3086,12 +3085,12 @@ static void profile_load_work(struct work_struct *work)
 	}
 
 	if ((val & RCONN_CONFIG_BIT) &&
-		chip->profile_value_esr_rslow_chg &&
-		chip->profile_value_esr_rslow_dischg) {
-		chip->batt_profile[chip->profile_offset_esr_rslow_chg] = chip->profile_value_esr_rslow_chg;
-		chip->batt_profile[chip->profile_offset_esr_rslow_dischg] = chip->profile_value_esr_rslow_dischg;
+		fg->profile_value_esr_rslow_chg &&
+		fg->profile_value_esr_rslow_dischg) {
+		chip->batt_profile[fg->profile_offset_esr_rslow_chg] = fg->profile_value_esr_rslow_chg;
+		chip->batt_profile[fg->profile_offset_esr_rslow_dischg] = fg->profile_value_esr_rslow_dischg;
 		printk("[ASUS] restore esr_rslow_chg/dischg to profile default %02x,%02x before load profile\n",
-			chip->profile_value_esr_rslow_chg, chip->profile_value_esr_rslow_dischg);
+			fg->profile_value_esr_rslow_chg, fg->profile_value_esr_rslow_dischg);
 	}
 // ASUS_BSP: restore esr_rslow to profile default before load profile ---
 
@@ -3156,7 +3155,7 @@ done:
 
 	fg_dbg(fg, FG_STATUS, "profile loaded successfully");
     if (0) {
-        schedule_delayed_work(&chip->safety_upgrade_work, 0);
+        schedule_delayed_work(&fg->safety_upgrade_work, 0);
     }
 out:
 	fg->soc_reporting_ready = true;
@@ -3879,7 +3878,7 @@ static int fg_psy_get_property(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_TEMP:
 		if (FAKE_TEMP_INIT == fake_temp) {
-			rc = fg_get_battery_temp(chip, &pval->intval);
+			rc = fg_get_battery_temp(fg, &pval->intval);
 		} else {
 			pval->intval = fake_temp;
 		}
@@ -4635,12 +4634,12 @@ static int fg_hw_init(struct fg_dev *fg)
 	}
 // ASUS_BSP +++
 	if (chip->dt.ki_coeff_cutoff_soc != -EINVAL) {
-		fg_encode(chip->sp, FG_SRAM_KI_COEFF_CUTOFF_SOC,
-			chip->dt.ki_coeff_cutoff_soc, &val);
-		rc = fg_sram_write(chip,
-				chip->sp[FG_SRAM_KI_COEFF_CUTOFF_SOC].addr_word,
-				chip->sp[FG_SRAM_KI_COEFF_CUTOFF_SOC].addr_byte,
-				&val, chip->sp[FG_SRAM_KI_COEFF_CUTOFF_SOC].len,
+		fg_encode(fg->sp, FG_SRAM_KI_COEFF_CUTOFF_SOC,
+			chip->dt.ki_coeff_cutoff_soc, buf);
+		rc = fg_sram_write(fg,
+				fg->sp[FG_SRAM_KI_COEFF_CUTOFF_SOC].addr_word,
+				fg->sp[FG_SRAM_KI_COEFF_CUTOFF_SOC].addr_byte,
+				buf, fg->sp[FG_SRAM_KI_COEFF_CUTOFF_SOC].len,
 				FG_IMA_DEFAULT);
 		if (rc < 0) {
 			pr_err("Error in writing ki_coeff_cutoff_soc, rc=%d\n", rc);
@@ -4763,14 +4762,21 @@ static irqreturn_t fg_batt_missing_irq_handler(int irq, void *data)
 	return IRQ_HANDLED;
 }
 
-int asus_clear_reload_battery_profile(struct fg_chip *chip)
+int asus_fg_get_rconn_mohms(struct fg_dev *fg)
+{
+	struct fg_gen3_chip *chip = container_of(fg, struct fg_gen3_chip, fg);
+
+	return chip->dt.rconn_mohms;
+}
+
+int asus_clear_reload_battery_profile(struct fg_dev *fg)
 {
 	u8 val = 0;
 	int rc;
 
 	printk("[ASUS][FG] in asus_clear_reload_battery_profile \n");
 
-	rc = fg_sram_write(chip, PROFILE_INTEGRITY_WORD,
+	rc = fg_sram_write(fg, PROFILE_INTEGRITY_WORD,
 			PROFILE_INTEGRITY_OFFSET, &val, 1, FG_IMA_DEFAULT);
 	if (rc < 0)
 	{
@@ -4779,7 +4785,7 @@ int asus_clear_reload_battery_profile(struct fg_chip *chip)
 	}
 
 	val = 0;
-	rc = fg_sram_write(chip, PROFILE_INTEGRITY_WORD,
+	rc = fg_sram_write(fg, PROFILE_INTEGRITY_WORD,
 			SW_CONFIG_OFFSET, &val, 1, FG_IMA_DEFAULT);
 	if (rc < 0)
 	{
@@ -4787,14 +4793,14 @@ int asus_clear_reload_battery_profile(struct fg_chip *chip)
 		return -10;
 	}
 
-	chip->asus_report_last_msoc_end_time = jiffies;
+	fg->asus_report_last_msoc_end_time = jiffies;
 
-	schedule_delayed_work(&chip->profile_load_work, 0);
+	schedule_delayed_work(&fg->profile_load_work, 0);
 
-	if (chip->fg_psy)
-		power_supply_changed(chip->fg_psy);
+	if (fg->fg_psy)
+		power_supply_changed(fg->fg_psy);
 
-	return asus_set_RCONN_RECORED(g_fgChip->dt.rconn_mohms);
+	return asus_set_RCONN_RECORED(asus_fg_get_rconn_mohms(fg));
 }
 
 static irqreturn_t fg_delta_batt_temp_irq_handler(int irq, void *data)
@@ -5665,7 +5671,7 @@ static void fg_cleanup(struct fg_gen3_chip *chip)
 }
 
 #define FG_DELAY_BATT_ID_MS 2000
-struct fg_chip *g_fgChip=NULL;
+struct fg_dev *g_fgChip = NULL;
 static int fg_gen3_probe(struct platform_device *pdev)
 {
 	struct fg_gen3_chip *chip;
@@ -5770,7 +5776,7 @@ static int fg_gen3_probe(struct platform_device *pdev)
 	INIT_DELAYED_WORK(&fg->profile_load_work, profile_load_work);
 	INIT_DELAYED_WORK(&chip->pl_enable_work, pl_enable_work);
 	INIT_WORK(&fg->status_change_work, status_change_work);
-	INIT_DELAYED_WORK(&chip->asus_check_full_work, asus_check_full_work);
+	INIT_DELAYED_WORK(&fg->asus_check_full_work, asus_check_full_work);
 	INIT_WORK(&fg->esr_sw_work, fg_esr_sw_work);
 	INIT_DELAYED_WORK(&chip->ttf_work, ttf_work);
 	INIT_DELAYED_WORK(&fg->sram_dump_work, sram_dump_work);
@@ -5856,13 +5862,13 @@ static int fg_gen3_probe(struct platform_device *pdev)
 	vote(fg->batt_miss_irq_en_votable, BATT_MISS_IRQ_VOTER, false, 0);
 
 // ASUS_BSP steven1_wang: add asus fg porting +++
-	chip->last_report_msoc = 0;
-	chip->asus_need_keep_report_full = 0;
-	chip->asus_pending_report_full = 0;
-	chip->asus_profile_changed = 0;
-	chip->asus_report_last_msoc_end_time = 0;
-	g_fgChip = chip;
-	asus_fg_porting(chip);
+	fg->last_report_msoc = 0;
+	fg->asus_need_keep_report_full = 0;
+	fg->asus_pending_report_full = 0;
+	fg->asus_profile_changed = 0;
+	fg->asus_report_last_msoc_end_time = 0;
+	g_fgChip = fg;
+	asus_fg_porting(fg);
 // ASUS_BSP steven1_wang: add asus fg porting ---
 
 	fg_debugfs_create(fg);
