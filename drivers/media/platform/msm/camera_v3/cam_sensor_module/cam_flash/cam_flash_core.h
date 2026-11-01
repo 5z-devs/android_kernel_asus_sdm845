@@ -23,11 +23,6 @@ int cam_flash_establish_link(struct cam_req_mgr_core_dev_link_setup *link);
 int cam_flash_apply_request(struct cam_req_mgr_apply_request *apply);
 int cam_flash_process_evt(struct cam_req_mgr_link_evt_data *event_data);
 int cam_flash_flush_request(struct cam_req_mgr_flush_request *flush);
-static inline int wled_flash_led_prepare(struct led_trigger *trig, int options,
-					int *max_current)
-{
-	return -EINVAL;
-}
 
 //ASUS_BSP +++ Zhengwei "porting flash"
 struct cam_flash_ctrl;

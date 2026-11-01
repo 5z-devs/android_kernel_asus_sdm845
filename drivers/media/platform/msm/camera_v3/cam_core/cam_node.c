@@ -36,7 +36,7 @@ static void cam_node_print_ctx_state(
 			"[%s][%d] : state=%d, refcount=%d, active_req_list=%d, pending_req_list=%d, wait_req_list=%d, free_req_list=%d",
 			ctx->dev_name,
 			i, ctx->state,
-			atomic_read(&(ctx->refcount.refcount)),
+			kref_read(&ctx->refcount),
 			list_empty(&ctx->active_req_list),
 			list_empty(&ctx->pending_req_list),
 			list_empty(&ctx->wait_req_list),
@@ -419,7 +419,7 @@ destroy_dev_hdl:
 
 	CAM_DBG(CAM_CORE, "[%s] Release ctx_id=%d, refcount=%d",
 		node->name, ctx->ctx_id,
-		atomic_read(&(ctx->refcount.refcount)));
+		kref_read(&ctx->refcount));
 
 	return rc;
 }
@@ -462,7 +462,7 @@ static int __cam_node_handle_release_hw_v1(struct cam_node *node,
 
 	CAM_DBG(CAM_CORE, "[%s] Release ctx_id=%d, refcount=%d",
 		node->name, ctx->ctx_id,
-		atomic_read(&(ctx->refcount.refcount)));
+		kref_read(&ctx->refcount));
 
 	return rc;
 }
