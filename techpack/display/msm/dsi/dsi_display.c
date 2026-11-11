@@ -33,10 +33,6 @@
 #define DSI_CLOCK_BITRATE_RADIX 10
 #define MAX_TE_SOURCE_ID  2
 
-//ASUS_BSP add to export display panel id to touch driver +++
-char* dsi_panel_id = NULL;
-EXPORT_SYMBOL(dsi_panel_id);
-//ASUS_BSP add to export display panel id to touch driver ---
 
 //ASUS_BSP display +++
 struct dsi_display *g_asus_display;
@@ -45,6 +41,16 @@ struct mutex dsi_op_mutex;
 
 static char dsi_display_primary[MAX_CMDLINE_PARAM_LEN];
 static char dsi_display_secondary[MAX_CMDLINE_PARAM_LEN];
+
+//ASUS_BSP add to export display panel id to touch driver +++
+/*
+ * msm_drm.dsi_display0 is a built-in module parameter and is already parsed
+ * when the first initcall runs. Point dsi_panel_id at it statically so the
+ * touch driver can read it even if it probes before the display driver.
+ */
+char *dsi_panel_id = dsi_display_primary;
+EXPORT_SYMBOL(dsi_panel_id);
+//ASUS_BSP add to export display panel id to touch driver ---
 static struct dsi_display_boot_param boot_displays[MAX_DSI_ACTIVE_DISPLAY] = {
 	{.boot_param = dsi_display_primary},
 	{.boot_param = dsi_display_secondary},

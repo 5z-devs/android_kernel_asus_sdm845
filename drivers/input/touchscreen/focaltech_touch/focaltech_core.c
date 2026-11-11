@@ -1458,7 +1458,7 @@ static int fts_ts_probe(struct i2c_client *client, const struct i2c_device_id *i
 
     FTS_FUNC_ENTER();
     FTS_ERROR("dsi_panel_id is %s, size %d", dsi_panel_id, (int)sizeof(TOUCH_PANEL_ID));
-    if(strncmp(dsi_panel_id, TOUCH_PANEL_ID, sizeof(TOUCH_PANEL_ID)-1) != 0){
+    if (!dsi_panel_id || strncmp(dsi_panel_id, TOUCH_PANEL_ID, sizeof(TOUCH_PANEL_ID)-1) != 0) {
 		FTS_ERROR("panel not connected");
 		return -ENODEV;
 	}
