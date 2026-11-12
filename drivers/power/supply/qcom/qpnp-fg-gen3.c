@@ -245,7 +245,7 @@ struct fg_gen3_chip {
 	bool			slope_limit_en;
 };
 
-static struct fg_sram_param pmi8998_v1_sram_params[] = {
+static struct fg_sram_param pmi8998_v1_sram_params[FG_SRAM_MAX] = {
 	PARAM(BATT_SOC, BATT_SOC_WORD, BATT_SOC_OFFSET, 4, 1, 1, 0, NULL,
 		fg_decode_default),
 	PARAM(FULL_SOC, FULL_SOC_WORD, FULL_SOC_OFFSET, 2, 1, 1, 0, NULL,
@@ -323,7 +323,7 @@ static struct fg_sram_param pmi8998_v1_sram_params[] = {
 // ASUS_BSP ---
 };
 
-static struct fg_sram_param pmi8998_v2_sram_params[] = {
+static struct fg_sram_param pmi8998_v2_sram_params[FG_SRAM_MAX] = {
 	PARAM(BATT_SOC, BATT_SOC_WORD, BATT_SOC_OFFSET, 4, 1, 1, 0, NULL,
 		fg_decode_default),
 	PARAM(FULL_SOC, FULL_SOC_WORD, FULL_SOC_OFFSET, 2, 1, 1, 0, NULL,
@@ -411,6 +411,11 @@ static struct fg_sram_param pmi8998_v2_sram_params[] = {
 		1, 512, 1000000, 0, fg_encode_default, NULL),
 	PARAM(SLOPE_LIMIT, SLOPE_LIMIT_WORD, SLOPE_LIMIT_OFFSET, 1, 8192, 1000,
 		0, fg_encode_default, NULL),
+// ASUS_BSP +++
+	PARAM(KI_COEFF_CUTOFF_SOC, KI_COEFF_CUTOFF_SOC_WORD,
+		KI_COEFF_CUTOFF_SOC_OFFSET, 1, 1000, 244141, 0,
+		fg_encode_default, NULL),
+// ASUS_BSP ---
 };
 
 static struct fg_alg_flag pmi8998_v1_alg_flags[] = {
