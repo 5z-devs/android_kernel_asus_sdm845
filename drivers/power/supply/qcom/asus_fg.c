@@ -70,13 +70,21 @@ struct CYCLE_COUNT_DATA g_cycle_count_data = {
 struct delayed_work check_water_proof_work;
 extern int fg_bp_params_config(struct fg_dev *chip);
 
+/*
+ * Needs one real cable: the extcon core only allocates the notifier heads
+ * when at least one cable is supported, and extcon_set_state_sync_asus()
+ * calls raw_notifier_call_chain() on them.
+ */
 static const unsigned int vbus_liquid_ext_supported_cable[] = {
+	EXTCON_MECHANICAL,
 	EXTCON_NONE,
 };
 static const unsigned int battery_version_ext_supported_cable[] = {
+	EXTCON_MECHANICAL,
 	EXTCON_NONE,
 };
 static const unsigned int battery_id_ext_supported_cable[] = {
+	EXTCON_MECHANICAL,
 	EXTCON_NONE,
 };
 
