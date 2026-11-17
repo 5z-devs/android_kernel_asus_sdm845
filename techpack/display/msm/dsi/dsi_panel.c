@@ -55,6 +55,25 @@ u32 bl_level[10]= {0};
 #define WLED_MAX_LEVEL_ENABLE           4095
 #define WLED_MIN_LEVEL_DISABLE          0
 
+/*
+ * The ASUS panel code drives the WLED through the "bkl-trigger" LED trigger,
+ * which needs the legacy qpnp-wled LED class driver. This kernel uses the
+ * qcom-spmi-wled backlight class driver instead, so also set the brightness
+ * on that backlight device (looked up lazily, it may probe after the panel).
+ */
+static void asus_wled_set(struct dsi_backlight_config *bl, int level)
+{
+	led_trigger_event(bl->wled, level);
+
+	if (!bl->raw_bd)
+		bl->raw_bd = backlight_device_get_by_type(BACKLIGHT_RAW);
+	if (bl->raw_bd) {
+		if (level > bl->raw_bd->props.max_brightness)
+			level = bl->raw_bd->props.max_brightness;
+		backlight_device_set_brightness(bl->raw_bd, level);
+	}
+}
+
 enum {
        PANEL_OFF_MODE = 0x0 ,
        PANEL_ON_MODE,
@@ -188,7 +207,7 @@ static ssize_t panel_on_off_mode_switch_proc_write(struct file *filp, const char
     if (copy_from_user(messages, buff, len))
 		return -EFAULT;
 	if(strncmp(messages, "0", 1) == 0) {  //panel off
-		led_trigger_event(bl->wled, WLED_MIN_LEVEL_DISABLE);
+		asus_wled_set(bl, WLED_MIN_LEVEL_DISABLE);
         panel_current_mode = PANEL_OFF_MODE;
 		rc = dsi_display_disable(g_asus_display);
 		if (rc) {
@@ -931,7 +950,7 @@ static void asus_lcd_led_trigger_dim(struct dsi_panel *panel,int from, int to)
 	for (temp = 0; temp <= g_wled_dimming_div; temp++) {
 		wled_level = (WLED_MAX_LEVEL_ENABLE * (from * g_wled_dimming_div + (to - from) * temp)) /\
 				(g_bl_threshold * g_wled_dimming_div);
-		led_trigger_event(bl->wled, wled_level);
+		asus_wled_set(bl, wled_level);
 		msleep(10);
 		//pr_err("[Display]%s: wled set to %d\n", __func__, wled_level);
 	}
@@ -1011,13 +1030,13 @@ int dsi_panel_set_backlight(struct dsi_panel *panel, u32 bl_lvl)
 	case DSI_BACKLIGHT_DCS:
 		if (bl_lvl == 0 ){//&& g_asus_last_backlight_level != 0){
 			msleep(43);//add for timing spec
-			led_trigger_event(bl->wled, WLED_MIN_LEVEL_DISABLE);
+			asus_wled_set(bl, WLED_MIN_LEVEL_DISABLE);
 			g_bl_wled_enable = false;
 		} else if (bl_lvl < g_bl_threshold) { /*wled control*/
 			if (g_asus_last_backlight_level == 0) {
 				msleep(43);//add for timing spec
 				pr_err("[Display] %s: system resume set BL wled directly\n", __func__);
-				led_trigger_event(bl->wled, 4095*bl_lvl/g_bl_threshold);
+				asus_wled_set(bl, 4095*bl_lvl/g_bl_threshold);
 				rc = dsi_panel_update_backlight(panel, g_bl_threshold);
 				send_dimming_cmd();
 			} else if (g_asus_last_backlight_level > bl_lvl) {
@@ -1033,7 +1052,7 @@ int dsi_panel_set_backlight(struct dsi_panel *panel, u32 bl_lvl)
 		} else { /*dcs control*/
 			if (g_asus_last_backlight_level == 0) {
 				msleep(43);//add for timing spec
-				led_trigger_event(bl->wled, WLED_MAX_LEVEL_ENABLE);
+				asus_wled_set(bl, WLED_MAX_LEVEL_ENABLE);
 				pr_err("[Display] %s: g_bl_wled_enable ctrl enable\n", __func__);
 				rc = dsi_panel_update_backlight(panel, bl_lvl);
 				send_dimming_cmd();
