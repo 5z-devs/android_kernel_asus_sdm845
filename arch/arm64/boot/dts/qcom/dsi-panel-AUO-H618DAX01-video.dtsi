@@ -11,7 +11,12 @@
  */
 
 &mdss_mdp {
-	dsi_panel_AUO_H618DAX01_video: qcom,dsi_panel_AUO_H618DAX01_video {
+	/*
+	 * The 4.19 DSI driver looks the panel up by *node name*, using the
+	 * name the bootloader passes as msm_drm.dsi_display0=<name>:
+	 * (dsi_panel_AUO_H618DAX01_video_display). Keep the label unchanged.
+	 */
+	dsi_panel_AUO_H618DAX01_video: dsi_panel_AUO_H618DAX01_video_display {
 		qcom,mdss-dsi-panel-name =
 				"AUO H618DAX01 video mode dsi panel";
 		qcom,mdss-dsi-panel-type = "dsi_video_mode";  /* key flag to diff video/cmd, in dsi_panel.c */
@@ -726,9 +731,9 @@
 };
 
 &pmi8998_wled {
-	qcom,fs-curr-ua = <20000>;
-	qcom,led-strings-list = [00 01];
-	qcom,switch-freq-khz = <600>;
+	/* two strings (qcom,string-cfg = <3>) come from sdm845-mtp.dtsi */
+	qcom,fs-current-limit = <20000>;
+	qcom,switching-freq = <600>;
 	qcom,en-cabc;
 };
 
