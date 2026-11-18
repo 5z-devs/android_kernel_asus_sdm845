@@ -3431,6 +3431,16 @@ static int _sde_kms_get_splash_data(struct sde_splash_data *data)
 		if (!i || !share_splash_mem) {
 			if (of_address_to_resource(node, i, &r)) {
 				SDE_ERROR("invalid data for:%s\n", node_name);
+				/*
+				 * num_splash_displays is already set and is what
+				 * sde_kms_hw_init(), sde_irq_preinstall(),
+				 * sde_kms_check_for_splash() and msm_lastclose() use
+				 * to decide whether a bootloader handoff is still in
+				 * progress, so drop the partial setup instead of
+				 * leaving them believing in a splash region that was
+				 * never parsed.
+				 */
+				memset(data, 0x0, sizeof(*data));
 				return -EINVAL;
 			}
 
