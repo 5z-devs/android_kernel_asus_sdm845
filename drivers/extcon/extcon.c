@@ -658,6 +658,12 @@ int extcon_set_state_sync_asus(struct extcon_dev *edev, int state)
 	if (!edev)
 		return -EINVAL;
 
+	/*
+	 * The ASUS supplies list no cable: their state is an ASUS enum, not a
+	 * cable mask, and extcon_dev_register() always provides the single
+	 * notifier head used below. Anything else would need a cable index this
+	 * helper does not have.
+	 */
 	if (edev->max_supported != 0)
 		return -EINVAL;
 
@@ -1400,13 +1406,17 @@ int extcon_dev_register(struct extcon_dev *edev)
 	}
 
 	spin_lock_init(&edev->lock);
-	if (edev->max_supported) {
-		edev->nh = kcalloc(edev->max_supported, sizeof(*edev->nh),
-				GFP_KERNEL);
-		if (!edev->nh) {
-			ret = -ENOMEM;
-			goto err_alloc_nh;
-		}
+
+	/*
+	 * One notifier head per cable, plus one for devices that list no cable:
+	 * their state is a driver-defined value (the ASUS supplies) that still
+	 * has to reach the notifier chain.
+	 */
+	edev->nh = kcalloc(edev->max_supported ? edev->max_supported : 1,
+			sizeof(*edev->nh), GFP_KERNEL);
+	if (!edev->nh) {
+		ret = -ENOMEM;
+		goto err_alloc_nh;
 	}
 
 	edev->bnh = kzalloc(sizeof(*edev->bnh) * edev->max_supported, GFP_KERNEL);
@@ -1419,6 +1429,10 @@ int extcon_dev_register(struct extcon_dev *edev)
 		RAW_INIT_NOTIFIER_HEAD(&edev->nh[index]);
 		BLOCKING_INIT_NOTIFIER_HEAD(&edev->bnh[index]);
 	}
+
+	/* Cable-less devices use the single head allocated above. */
+	if (!edev->max_supported)
+		RAW_INIT_NOTIFIER_HEAD(&edev->nh[0]);
 
 	RAW_INIT_NOTIFIER_HEAD(&edev->nh_all);
 
@@ -1440,8 +1454,7 @@ int extcon_dev_register(struct extcon_dev *edev)
 err_reg:
 	kfree(edev->bnh);
 err_dev:
-	if (edev->max_supported)
-		kfree(edev->nh);
+	kfree(edev->nh);
 err_alloc_nh:
 	if (edev->max_supported)
 		kfree(edev->extcon_dev_type.groups);
@@ -1503,8 +1516,8 @@ void extcon_dev_unregister(struct extcon_dev *edev)
 	if (edev->max_supported) {
 		kfree(edev->extcon_dev_type.groups);
 		kfree(edev->cables);
-		kfree(edev->nh);
 	}
+	kfree(edev->nh);
 	kfree(edev->bnh);
 
 	put_device(&edev->dev);

@@ -53,16 +53,14 @@ const int draco_evb_icl_cfg[]={500,900,950,1400,1910};
 extern void asp1690_enable(bool enable);
 
 /*
- * Needs one real cable: the extcon core only allocates the notifier heads
- * when at least one cable is supported, and extcon_set_state_sync_asus()
- * calls raw_notifier_call_chain() on them.
+ * These devices publish an ASUS-defined enum rather than a cable bitmask, so
+ * they list no cable; extcon_set_state_sync_asus() uses the single notifier
+ * head the core allocates for cable-less devices.
  */
 static const unsigned int usb_connector_ext_supported_cable[] = {
-	EXTCON_MECHANICAL,
 	EXTCON_NONE,
 };
 static const unsigned int qc_stat_ext_supported_cable[] = {
-	EXTCON_MECHANICAL,
 	EXTCON_NONE,
 };
 
