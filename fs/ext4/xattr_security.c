@@ -18,7 +18,7 @@ ext4_xattr_security_get(const struct xattr_handler *handler,
 			const char *name, void *buffer, size_t size)
 {
 	if (strcmp(name, "sehash") == 0 && test_opt(dentry->d_sb, NO_SEHASH_XATTR))
-		return 0;
+		return -ENODATA;
 	return ext4_xattr_get(inode, EXT4_XATTR_INDEX_SECURITY,
 			      name, buffer, size);
 }
