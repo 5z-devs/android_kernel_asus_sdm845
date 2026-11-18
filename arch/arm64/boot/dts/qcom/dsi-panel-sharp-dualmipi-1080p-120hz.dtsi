@@ -624,6 +624,9 @@
 				qcom,mdss-dsi-on-command-state = "dsi_lp_mode";
 				qcom,mdss-dsi-off-command-state = "dsi_hs_mode";
 				qcom,mdss-dsi-h-sync-pulse = <0>;
+
+				qcom,display-topology = <2 0 2>;
+				qcom,default-topology-index = <0>;
 			};
 		};
 	};

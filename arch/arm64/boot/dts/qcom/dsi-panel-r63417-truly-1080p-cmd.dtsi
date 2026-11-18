@@ -94,6 +94,9 @@
 		qcom,mdss-dsi-off-command-state = "dsi_lp_mode";
 		qcom,mdss-dsi-panel-timings =
 				[e6 38 26 00 68 6e 2a 3c 44 03 04 00];
+
+		qcom,display-topology = <1 0 1>;
+		qcom,default-topology-index = <0>;
 			};
 		};
 	};
