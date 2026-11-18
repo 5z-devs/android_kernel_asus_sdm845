@@ -45,10 +45,6 @@
 				qcom,mdss-dsi-v-back-porch = <4>;
 				qcom,mdss-dsi-v-front-porch = <8>;
 				qcom,mdss-dsi-v-pulse-width = <4>;
-				qcom,mdss-dsi-h-left-border = <0>;
-				qcom,mdss-dsi-h-right-border = <0>;
-				qcom,mdss-dsi-v-top-border = <0>;
-				qcom,mdss-dsi-v-bottom-border = <0>;
 				qcom,mdss-dsi-h-sync-pulse = <0>;
 				qcom,mdss-dsi-panel-framerate = <60>;
 				qcom,mdss-dsi-on-command-state = "dsi_lp_mode";

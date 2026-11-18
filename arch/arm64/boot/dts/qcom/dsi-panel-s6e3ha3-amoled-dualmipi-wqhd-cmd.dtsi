@@ -135,10 +135,6 @@
 				qcom,mdss-dsi-v-back-porch = <31>;
 				qcom,mdss-dsi-v-front-porch = <30>;
 				qcom,mdss-dsi-v-pulse-width = <8>;
-				qcom,mdss-dsi-h-left-border = <0>;
-				qcom,mdss-dsi-h-right-border = <0>;
-				qcom,mdss-dsi-v-top-border = <0>;
-				qcom,mdss-dsi-v-bottom-border = <0>;
 				qcom,display-topology = <2 0 2>;
 				qcom,default-topology-index = <0>;
 			};
