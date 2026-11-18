@@ -29,10 +29,7 @@
 		 */
 		qcom,dsi-ctrl-num = <0>;
 		qcom,dsi-phy-num = <0>;
-		qcom,mdss-dsi-stream = <0>;
 		qcom,mdss-dsi-bpp = <24>;
-		qcom,mdss-dsi-underflow-color = <0xff>;
-		qcom,mdss-dsi-border-color = <0>;
 		qcom,mdss-dsi-reset-sequence = <1 3>, <0 3>, <1 15>;  /* >1, >1, >10 */
 		qcom,mdss-dsi-traffic-mode = "burst_mode";
 		qcom,mdss-dsi-bllp-eof-power-mode;
@@ -49,7 +46,6 @@
 		qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
 
 		qcom,mdss-dsi-tx-eot-append;
-		qcom,mdss-dsi-post-init-delay = <1>;
 
 		qcom,mdss-pan-physical-width-dimension = <68>;
 		qcom,mdss-pan-physical-height-dimension = <141>;
