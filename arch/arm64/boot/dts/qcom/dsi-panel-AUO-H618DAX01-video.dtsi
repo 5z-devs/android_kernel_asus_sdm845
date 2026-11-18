@@ -21,6 +21,14 @@
 				"AUO H618DAX01 video mode dsi panel";
 		qcom,mdss-dsi-panel-type = "dsi_video_mode";  /* key flag to diff video/cmd, in dsi_panel.c */
 		qcom,mdss-dsi-virtual-channel-id = <0>;
+		/*
+		 * 4.19 DSI: these index the qcom,dsi-ctrl/qcom,dsi-phy phandle lists
+		 * in the sde_dsi node. Without them dsi_display_parse_dt() reads
+		 * -EINVAL as the index, ctrl_of_node ends up NULL and the display
+		 * defers on dsi_ctrl_get() forever.
+		 */
+		qcom,dsi-ctrl-num = <0>;
+		qcom,dsi-phy-num = <0>;
 		qcom,mdss-dsi-stream = <0>;
 		qcom,mdss-dsi-bpp = <24>;
 		qcom,mdss-dsi-underflow-color = <0xff>;
