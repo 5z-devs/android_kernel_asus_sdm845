@@ -42,3 +42,14 @@
 	qcom,msm-id = <321 0x20000>;
 	qcom,board-id = <47 0>;
 };
+
+/*
+ * The bootloader's splash handoff is not resumable by this kernel: as soon as
+ * SDE finds cont_splash_region it assumes the panel is already initialised,
+ * skips dsi_panel_pre_prepare() and DSI_CMD_SET_ON, and never enables the DSI
+ * video engine, leaving the panel lit by its backlight but blank.  Empty the
+ * region so SDE takes the normal path and brings the panel up itself.
+ */
+&cont_splash_memory {
+	reg = <>;
+};
