@@ -15,10 +15,7 @@
 		qcom,dsi-select-clocks = "mux_byte_clk0", "mux_pixel_clk0";
 
 		qcom,mdss-dsi-virtual-channel-id = <0>;
-		qcom,mdss-dsi-stream = <0>;
 		qcom,mdss-dsi-bpp = <24>;
-		qcom,mdss-dsi-underflow-color = <0x3ff>;
-		qcom,mdss-dsi-border-color = <0>;
 		qcom,mdss-dsi-panel-hdr-enabled;
 		qcom,mdss-dsi-panel-hdr-color-primaries = <14500 15500 32000
 			17000 15500 30000 8000 3000>;
@@ -39,8 +36,6 @@
 		qcom,cmd-sync-wait-broadcast;
 		qcom,mdss-dsi-t-clk-post = <0x0d>;
 		qcom,mdss-dsi-t-clk-pre = <0x2d>;
-		qcom,mdss-dsi-min-refresh-rate = <55>;
-		qcom,mdss-dsi-max-refresh-rate = <60>;
 		qcom,mdss-dsi-pan-enable-dynamic-fps;
 		qcom,mdss-dsi-pan-fps-update =
 			"dfps_immediate_porch_mode_vfp";

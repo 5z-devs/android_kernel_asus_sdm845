@@ -13,17 +13,12 @@
 		qcom,dsi-phy-num = <0 1>;
 
 		qcom,mdss-dsi-virtual-channel-id = <0>;
-		qcom,mdss-dsi-stream = <0>;
 		qcom,mdss-dsi-bpp = <24>;
-		qcom,mdss-dsi-underflow-color = <0xff>;
-		qcom,mdss-dsi-border-color = <0>;
 		qcom,mdss-dsi-reset-sequence = <1 20>, <0 1>, <1 10>;
 		qcom,mdss-dsi-traffic-mode = "burst_mode";
 		qcom,mdss-dsi-bllp-eof-power-mode;
 		qcom,mdss-dsi-bllp-power-mode;
 		qcom,cmd-sync-wait-broadcast;
-		qcom,cmd-sync-wait-trigger;
-		qcom,mdss-tear-check-frame-rate = <12000>;
 		qcom,mdss-dsi-lane-0-state;
 		qcom,mdss-dsi-lane-1-state;
 		qcom,mdss-dsi-lane-2-state;
@@ -34,8 +29,6 @@
 		qcom,mdss-dsi-wr-mem-start = <0x2c>;
 		qcom,mdss-dsi-wr-mem-continue = <0x3c>;
 		qcom,mdss-dsi-te-dcs-command = <1>;
-		qcom,mdss-dsi-te-check-enable;
-		qcom,mdss-dsi-te-using-te-pin;
 
 		qcom,mdss-dsi-display-timings {
 			timing@0{

@@ -14,11 +14,8 @@
 		qcom,dsi-select-clocks = "mux_byte_clk0", "mux_pixel_clk0";
 
 		qcom,mdss-dsi-virtual-channel-id = <0>;
-		qcom,mdss-dsi-stream = <0>;
 		qcom,mdss-dsi-bpp = <24>;
 		qcom,mdss-dsi-color-order = "rgb_swap_rgb";
-		qcom,mdss-dsi-underflow-color = <0xff>;
-		qcom,mdss-dsi-border-color = <0>;
 		qcom,mdss-dsi-traffic-mode = "non_burst_sync_event";
 		qcom,mdss-dsi-bllp-eof-power-mode;
 		qcom,mdss-dsi-bllp-power-mode;
@@ -27,9 +24,6 @@
 		qcom,mdss-dsi-lane-1-state;
 		qcom,mdss-dsi-lane-2-state;
 		qcom,mdss-dsi-lane-3-state;
-		qcom,mdss-dsi-hor-line-idle = <0 40 256>,
-						<40 120 128>,
-						<120 240 64>;
 		qcom,mdss-dsi-reset-sequence = <1 10>, <0 10>, <1 10>;
 		qcom,mdss-dsi-bl-max-level = <4095>;
 		qcom,mdss-dsi-dma-trigger = "trigger_sw";
@@ -38,10 +32,7 @@
 		qcom,mdss-dsi-wr-mem-start = <0x2c>;
 		qcom,mdss-dsi-wr-mem-continue = <0x3c>;
 		qcom,mdss-dsi-te-dcs-command = <1>;
-		qcom,mdss-dsi-te-check-enable;
 		qcom,mdss-dsi-te-using-wd;
-		qcom,mdss-dsi-te-using-te-pin;
-		qcom,panel-ack-disabled;
 
 		qcom,mdss-dsi-display-timings {
 			timing@0{
