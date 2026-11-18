@@ -51,10 +51,6 @@
 		qcom,mdss-dsi-v-front-porch = <4>;
 		qcom,mdss-dsi-v-pulse-width = <1>;
 		qcom,mdss-dsi-h-sync-pulse = <0>;
-		qcom,mdss-dsi-h-left-border = <0>;
-		qcom,mdss-dsi-h-right-border = <0>;
-		qcom,mdss-dsi-v-top-border = <0>;
-		qcom,mdss-dsi-v-bottom-border = <0>;
 		qcom,mdss-dsi-panel-framerate = <60>;
 		qcom,mdss-dsi-on-command =
 			[23 01 00 00 00 00 02 d6 01
@@ -92,11 +88,6 @@
 				 05 01 00 00 78 00 02 10 00];
 		qcom,mdss-dsi-on-command-state = "dsi_lp_mode";
 		qcom,mdss-dsi-off-command-state = "dsi_lp_mode";
-		qcom,mdss-dsi-panel-timings =
-				[e6 38 26 00 68 6e 2a 3c 44 03 04 00];
-
-		qcom,display-topology = <1 0 1>;
-		qcom,default-topology-index = <0>;
 			};
 		};
 	};

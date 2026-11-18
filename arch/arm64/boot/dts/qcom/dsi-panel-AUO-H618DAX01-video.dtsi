@@ -81,10 +81,6 @@
 				qcom,mdss-dsi-v-front-porch = <16>;
 				qcom,mdss-dsi-v-pulse-width = <2>;
 				qcom,mdss-dsi-panel-framerate = <60>;
-				qcom,mdss-dsi-h-left-border = <0>;
-				qcom,mdss-dsi-h-right-border = <0>;
-				qcom,mdss-dsi-v-top-border = <0>;
-				qcom,mdss-dsi-v-bottom-border = <0>;
 				qcom,mdss-dsi-on-command =[
 					/* Enable Command2 */
 					39 01 00 00 00 00 02 00 00
@@ -727,7 +723,6 @@
 &ibb_regulator {
 	/delete-property/ qcom,qpnp-ibb-use-default-voltage;
 	qcom,qpnp-ibb-discharge-resistor = <300>;
-
 };
 
 &lab_regulator {
