@@ -30,6 +30,15 @@ struct mmu_notifier_mm {
 	spinlock_t lock;
 };
 
+enum mmu_notifier_event {
+	MMU_NOTIFY_UNMAP = 0,
+	MMU_NOTIFY_CLEAR,
+	MMU_NOTIFY_PROTECTION_VMA,
+	MMU_NOTIFY_PROTECTION_PAGE,
+	MMU_NOTIFY_SOFT_DIRTY,
+	MMU_NOTIFY_RELEASE,
+};
+
 struct mmu_notifier_range {
 	struct mm_struct *mm;
 	unsigned long start;
