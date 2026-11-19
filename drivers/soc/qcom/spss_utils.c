@@ -511,13 +511,13 @@ static long spss_utils_ioctl(struct file *file,
 	size = _IOC_SIZE(cmd);
 	if (size && (cmd & IOC_IN)) {
 		if (size > sizeof(data)) {
-			pr_err("cmd [0x%x] size [0x%zu] too large\n",
+			pr_err("cmd [0x%x] size [%zu] too large\n",
 				cmd, size);
 			return -EINVAL;
 		}
 
 		if (copy_from_user(data, (void __user *)arg, size)) {
-			pr_err("copy_from_user() failed, cmd [0x%x] size [0x%zu]\n",
+			pr_err("copy_from_user() failed, cmd [0x%x] size [%zu]\n",
 				cmd, size);
 			return -EFAULT;
 		}
@@ -526,7 +526,7 @@ static long spss_utils_ioctl(struct file *file,
 	switch (cmd) {
 	case SPSS_IOC_SET_FW_CMAC:
 		if (size != sizeof(fw_and_apps_cmacs)) {
-			pr_err("cmd [0x%x] invalid size [0x%zu]\n", cmd, size);
+			pr_err("cmd [0x%x] invalid size [%zu]\n", cmd, size);
 			return -EINVAL;
 		}
 
@@ -564,7 +564,7 @@ static long spss_utils_ioctl(struct file *file,
 	case SPSS_IOC_WAIT_FOR_EVENT:
 		/* check input params */
 		if (size != sizeof(struct spss_ioc_wait_for_event)) {
-			pr_err("cmd [0x%x] invalid size [0x%zu]\n", cmd, size);
+			pr_err("cmd [0x%x] invalid size [%zu]\n", cmd, size);
 			return -EINVAL;
 		}
 		ret = spss_wait_for_event(req);
@@ -579,7 +579,7 @@ static long spss_utils_ioctl(struct file *file,
 	case SPSS_IOC_SIGNAL_EVENT:
 		/* check input params */
 		if (size != sizeof(struct spss_ioc_signal_event)) {
-			pr_err("cmd [0x%x] invalid size [0x%zu]\n", cmd, size);
+			pr_err("cmd [0x%x] invalid size [%zu]\n", cmd, size);
 			return -EINVAL;
 		}
 		ret = spss_signal_event(req);
@@ -594,7 +594,7 @@ static long spss_utils_ioctl(struct file *file,
 	case SPSS_IOC_IS_EVENT_SIGNALED:
 		/* check input params */
 		if (size != sizeof(struct spss_ioc_is_signaled)) {
-			pr_err("cmd [0x%x] invalid size [0x%zu]\n", cmd, size);
+			pr_err("cmd [0x%x] invalid size [%zu]\n", cmd, size);
 			return -EINVAL;
 		}
 		ret = spss_is_event_signaled(req);
