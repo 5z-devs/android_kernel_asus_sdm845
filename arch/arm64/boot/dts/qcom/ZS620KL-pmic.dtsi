@@ -70,7 +70,7 @@
 
 &pmi8998_gpios {
 	qnovo_fet_ctrl {
-		qnovo_fet_ctrl_default: qnovo_fet_ctrl_default {
+		qnovo_fet_ctrl_default {
 			/delete-property/output-low;
 			/delete-property/input-disable;
 			input-enable;
@@ -79,7 +79,7 @@
 	};
 
 	usb2_vbus_det {
-		usb2_vbus_det_default: usb2_vbus_det_default {
+		usb2_vbus_det_default {
 			/delete-property/bias-pull-down;
 			bias-disable;
 		};
