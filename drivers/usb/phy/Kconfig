@@ -142,6 +142,7 @@ config USB_MSM_OTG
 	depends on (USB || USB_GADGET) && (ARCH_QCOM || COMPILE_TEST)
 	depends on USB_GADGET || !USB_GADGET # if USB_GADGET=m, this can't be 'y'
 	depends on RESET_CONTROLLER
+	depends on REGULATOR
 	select USB_PHY
 	help
 	  Enable this to support the USB OTG transceiver on the chipset.
@@ -164,6 +165,7 @@ config USB_MSM_SSPHY_QMP
 config MSM_QUSB_PHY
 	tristate "MSM QUSB2 PHY Driver"
 	depends on ARCH_QCOM
+	depends on REGULATOR
 	select USB_PHY
 	help
 	  Enable this to support the QUSB2 PHY on MSM chips. This driver supports
@@ -174,6 +176,7 @@ config MSM_QUSB_PHY
 config MSM_HSUSB_PHY
 	tristate "MSM HSUSB PHY Driver"
 	depends on ARCH_QCOM
+	depends on REGULATOR
 	select USB_PHY
 	help
 	  Enable this to support the HSUSB PHY on MSM chips. This driver supports

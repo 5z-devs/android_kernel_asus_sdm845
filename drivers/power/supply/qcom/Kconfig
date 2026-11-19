@@ -5,6 +5,7 @@ menu "Qualcomm Technologies, Inc. Charger and Fuel Gauge support"
 config QPNP_SMB2
         tristate "SMB2 Battery Charger"
         depends on MFD_SPMI_PMIC
+        depends on REGULATOR
         help
           Say Y to enables support for the SMB2 charging peripheral.
           The QPNP SMB2 charger driver supports the charger peripheral
@@ -18,6 +19,7 @@ config QPNP_SMB2
 config QPNP_SMB5
 	tristate "SMB5 Battery Charger"
 	depends on MFD_SPMI_PMIC
+	depends on REGULATOR
 	help
 	  Say Y to enables support for the SMB5 charging peripheral.
 	  The QPNP SMB5 charger driver supports the charger peripheral
@@ -62,6 +64,7 @@ config QPNP_LINEAR_CHARGER
 config SMB138X_CHARGER
 	tristate "SMB138X Battery Charger"
 	depends on MFD_I2C_PMIC
+	depends on REGULATOR
 	help
 	  Say Y to include support for SMB138X Battery Charger.
 	  SMB1380 is a dual phase 6A battery charger, and SMB1381 is a single
@@ -85,6 +88,7 @@ config SMB1390_CHARGE_PUMP_PSY
 config SMB1351_USB_CHARGER
         tristate "smb1351 usb charger (with VBUS detection)"
         depends on I2C
+        depends on REGULATOR
         help
          Say Y to enable support for the SMB1351 switching mode based charger.
          The driver supports charging control (enable/disable) and
@@ -95,6 +99,7 @@ config SMB1351_USB_CHARGER
 config SMB1360_CHARGER_FG
 	tristate "SMB1360 Charger and Fuel Gauge"
 	depends on I2C
+	depends on REGULATOR
 	help
 	  Say Y to include support for SMB1360 Charger and Fuel Gauge.
 	  SMB1360 is a single path switching mode charger capable of charging

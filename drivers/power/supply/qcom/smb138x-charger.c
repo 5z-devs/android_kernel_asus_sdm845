@@ -517,11 +517,12 @@ static int smb138x_batt_get_prop(struct power_supply *psy,
 {
 	struct smb138x *chip = power_supply_get_drvdata(psy);
 	struct smb_charger *chg = &chip->chg;
+	union power_supply_propval asus_val = {0, };
 	int rc = 0;
 
 	switch (prop) {
 	case POWER_SUPPLY_PROP_STATUS:
-		rc = smblib_get_prop_batt_status(chg, val);
+		rc = smblib_get_prop_batt_status(chg, val, &asus_val);
 		break;
 	case POWER_SUPPLY_PROP_HEALTH:
 		rc = smblib_get_prop_batt_health(chg, val);
