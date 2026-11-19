@@ -32,6 +32,7 @@
 
 #include <linux/i2c.h>
 #include <linux/of_gpio.h>
+#include <drm/drm_panel.h>
 #include "synaptics_tcm_core.h"
 #include "linux/moduleparam.h"
 
