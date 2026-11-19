@@ -236,6 +236,9 @@ config ARCH_SDM845
 	select COMMON_CLK
 	select COMMON_CLK_QCOM
 	select QCOM_GDSC
+	# The video driver in techpack/ is built in and uses the V4L2
+	# videobuf2 core, which has no prompt of its own.
+	select VIDEOBUF2_CORE
 	help
 	  This enables support for the SDM845 chipset. If you do not
 	  wish to build a kernel that runs on this chipset, say 'N' here.
