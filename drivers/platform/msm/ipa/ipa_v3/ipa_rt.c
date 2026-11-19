@@ -1205,7 +1205,7 @@ static void __ipa_convert_rt_rule_in(struct ipa_rt_rule rule_in,
 {
 	if (unlikely(sizeof(struct ipa_rt_rule) >
 			sizeof(struct ipa_rt_rule_i))) {
-					IPAERR_RL("invalid size in:%zu size out:%zu\n",
+		IPAERR_RL("invalid size in:%zu size out:%zu\n",
 			sizeof(struct ipa_rt_rule),
 			sizeof(struct ipa_rt_rule_i));
 		return;
