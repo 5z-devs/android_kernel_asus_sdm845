@@ -1303,7 +1303,7 @@ static ssize_t store_mask_and_match(struct device *dev,
 	struct sdhci_host *host = dev_get_drvdata(dev);
 	unsigned long value;
 	char *token;
-	int i = 0;
+	int i = 0, ret;
 	u32 mask = 0, match = 0, bit_shift = 0, testbus = 0;
 
 	char *temp = (char *)buf;
@@ -1312,7 +1312,9 @@ static ssize_t store_mask_and_match(struct device *dev,
 		return -EINVAL;
 
 	while ((token = strsep(&temp, " "))) {
-		kstrtoul(token, 0, &value);
+		ret = kstrtoul(token, 0, &value);
+		if (ret)
+			return ret;
 		if (i == 0)
 			mask = value;
 		else if (i == 1)
