@@ -142,7 +142,7 @@ good_area:
 	if (unlikely(fatal_signal_pending(current))) {
 
 		/*
-		 * if fault retry, mmap_sem already relinquished by core mm
+		 * if fault retry, mmap_lock already relinquished by core mm
 		 * so OK to return to user mode (with signal handled first)
 		 */
 		if (fault & VM_FAULT_RETRY) {

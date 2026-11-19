@@ -240,7 +240,7 @@ static inline unsigned long migrate_pfn(unsigned long pfn)
  *
  * It is safe to update device page table from within the finalize_and_map()
  * callback because both destination and source page are still locked, and the
- * mmap_sem is held in read mode (hence no one can unmap the range being
+ * mmap_lock is held in read mode (hence no one can unmap the range being
  * migrated).
  *
  * Once callback is done cleaning up things and updating its page table (if it

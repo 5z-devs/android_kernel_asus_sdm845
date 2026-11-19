@@ -342,7 +342,7 @@ static void mpol_rebind_preferred(struct mempolicy *pol,
 /*
  * mpol_rebind_policy - Migrate a policy to a different set of nodes
  *
- * Per-vma policies are protected by mmap_sem. Allocations using per-task
+ * Per-vma policies are protected by mmap_lock. Allocations using per-task
  * policies are protected by task->mems_allowed_seq to prevent a premature
  * OOM/allocation failure due to parallel nodemask modification.
  */
@@ -372,7 +372,7 @@ void mpol_rebind_task(struct task_struct *tsk, const nodemask_t *new)
 /*
  * Rebind each vma in mm to new nodemask.
  *
- * Call holding a reference to mm.  Takes mm->mmap_sem during call.
+ * Call holding a reference to mm.  Takes mm->mmap_lock during call.
  */
 
 void mpol_rebind_mm(struct mm_struct *mm, nodemask_t *new)
@@ -695,7 +695,7 @@ queue_pages_range(struct mm_struct *mm, unsigned long start, unsigned long end,
 
 /*
  * Apply policy to a single VMA
- * This must be called with the mmap_sem held for writing.
+ * This must be called with the mmap_lock held for writing.
  */
 static int vma_replace_policy(struct vm_area_struct *vma,
 						struct mempolicy *pol)
@@ -720,7 +720,7 @@ static int vma_replace_policy(struct vm_area_struct *vma,
 	}
 
 	old = vma->vm_policy;
-	vma->vm_policy = new; /* protected by mmap_sem */
+	vma->vm_policy = new; /* protected by mmap_lock */
 	mpol_put(old);
 
 	return 0;
@@ -2076,7 +2076,7 @@ static struct page *alloc_page_interleave(gfp_t gfp, unsigned order,
  *
  * 	This function allocates a page from the kernel page pool and applies
  *	a NUMA policy associated with the VMA or the current process.
- *	When VMA is not NULL caller must hold down_read on the mmap_sem of the
+ *	When VMA is not NULL caller must hold down_read on the mmap_lock of the
  *	mm_struct of the VMA to prevent it from going away. Should be used for
  *	all allocations for pages that will be mapped into user space. Returns
  *	NULL when no page can be allocated.

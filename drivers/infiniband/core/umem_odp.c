@@ -430,7 +430,7 @@ int ib_umem_odp_get(struct ib_ucontext *context, struct ib_umem *umem,
 		INIT_HLIST_NODE(&context->mn.hlist);
 		context->mn.ops = &ib_umem_notifiers;
 		/*
-		 * Lock-dep detects a false positive for mmap_sem vs.
+		 * Lock-dep detects a false positive for mmap_lock vs.
 		 * umem_rwsem, due to not grasping downgrade_write correctly.
 		 */
 		lockdep_off();

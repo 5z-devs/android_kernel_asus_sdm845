@@ -125,7 +125,7 @@ good_area:
 
 	/*
 	 * If we need to retry but a fatal signal is pending, handle the
-	 * signal first. We do not need to release the mmap_sem because it
+	 * signal first. We do not need to release the mmap_lock because it
 	 * would already be released in __lock_page_or_retry in mm/filemap.c.
 	 */
 	if (fault_signal_pending(fault, regs))
@@ -163,7 +163,7 @@ good_area:
 			flags |= FAULT_FLAG_TRIED;
 
 			/*
-			 * No need to up_read(&mm->mmap_sem) as we would
+			 * No need to up_read(&mm->mmap_lock) as we would
 			 * have already released it in __lock_page_or_retry
 			 * in mm/filemap.c.
 			 */

@@ -97,9 +97,9 @@ Efault:
  * address, return -ERANGE.
  *
  * We ensure that the copy_from_user is executed in atomic context so that
- * do_page_fault() doesn't attempt to take mmap_sem.  This makes
+ * do_page_fault() doesn't attempt to take mmap_lock.  This makes
  * copy_from_kernel_nofault() suitable for use within regions where the caller
- * already holds mmap_sem, or other locks which nest inside mmap_sem.
+ * already holds mmap_lock, or other locks which nest inside mmap_lock.
  */
 long copy_from_kernel_nofault(void *dst, const void *src, size_t size)
 {

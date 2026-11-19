@@ -432,7 +432,7 @@ static void recover_worker(struct work_struct *work)
 
 			/*
 			 * So slightly annoying, in other paths like
-			 * mmap'ing gem buffers, mmap_sem is acquired
+			 * mmap'ing gem buffers, mmap_lock is acquired
 			 * before struct_mutex, which means we can't
 			 * hold struct_mutex across the call to
 			 * get_cmdline().  But submits are retired

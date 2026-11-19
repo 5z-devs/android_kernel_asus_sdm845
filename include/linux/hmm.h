@@ -376,7 +376,7 @@ bool hmm_vma_range_done(struct hmm_range *range);
  * be updated with the fault result and current snapshot of the CPU page table
  * for the range.
  *
- * The mmap_sem must be taken in read mode before entering and it might be
+ * The mmap_lock must be taken in read mode before entering and it might be
  * dropped by the function if the block argument is false. In that case, the
  * function returns -EAGAIN.
  *

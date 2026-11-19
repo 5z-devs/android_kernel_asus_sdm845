@@ -733,7 +733,7 @@ static const struct mmu_notifier_ops nv_nmmu_notifier_ops = {
  * Returns an error if there no contexts are currently available or a
  * npu_context which should be passed to pnv_npu2_handle_fault().
  *
- * mmap_sem must be held in write mode and must not be called from interrupt
+ * mmap_lock must be held in write mode and must not be called from interrupt
  * context.
  */
 struct npu_context *pnv_npu2_init_context(struct pci_dev *gpdev,
@@ -815,7 +815,7 @@ struct npu_context *pnv_npu2_init_context(struct pci_dev *gpdev,
 		 * We can set up these fields without holding the
 		 * npu_context_lock as the npu_context hasn't been returned to
 		 * the caller meaning it can't be destroyed. Parallel allocation
-		 * is protected against by mmap_sem.
+		 * is protected against by mmap_lock.
 		 */
 		rc = -ENOMEM;
 		npu_context = kzalloc(sizeof(struct npu_context), GFP_KERNEL);
@@ -923,7 +923,7 @@ void pnv_npu2_destroy_context(struct npu_context *npu_context,
 EXPORT_SYMBOL(pnv_npu2_destroy_context);
 
 /*
- * Assumes mmap_sem is held for the contexts associated mm.
+ * Assumes mmap_lock is held for the contexts associated mm.
  */
 int pnv_npu2_handle_fault(struct npu_context *context, uintptr_t *ea,
 			unsigned long *flags, unsigned long *status, int count)
@@ -932,7 +932,7 @@ int pnv_npu2_handle_fault(struct npu_context *context, uintptr_t *ea,
 	int i, is_write;
 	struct page *page[1];
 
-	/* mmap_sem should be held so the struct_mm must be present */
+	/* mmap_lock should be held so the struct_mm must be present */
 	struct mm_struct *mm = context->mm;
 
 	if (!firmware_has_feature(FW_FEATURE_OPAL))

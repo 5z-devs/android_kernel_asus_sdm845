@@ -451,11 +451,11 @@ void usnic_uiom_reg_release(struct usnic_uiom_reg *uiomr,
 	diff = PAGE_ALIGN(uiomr->length + uiomr->offset) >> PAGE_SHIFT;
 
 	/*
-	 * We may be called with the mm's mmap_sem already held.  This
+	 * We may be called with the mm's mmap_lock already held.  This
 	 * can happen when a userspace munmap() is the call that drops
 	 * the last reference to our file and calls our release
 	 * method.  If there are memory regions to destroy, we'll end
-	 * up here and not be able to take the mmap_sem.  In that case
+	 * up here and not be able to take the mmap_lock.  In that case
 	 * we defer the vm_locked accounting to the system workqueue.
 	 */
 	if (ucontext->closing) {

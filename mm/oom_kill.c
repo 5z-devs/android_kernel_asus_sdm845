@@ -742,7 +742,7 @@ static bool oom_reap_task_mm(struct task_struct *tsk, struct mm_struct *mm)
 	/*
 	 * MMF_OOM_SKIP is set by exit_mmap when the OOM reaper can't
 	 * work on the mm anymore. The check for MMF_OOM_SKIP must run
-	 * under mmap_sem for reading because it serializes against the
+	 * under mmap_lock for reading because it serializes against the
 	 * down_write();up_write() cycle in exit_mmap().
 	 */
 	if (test_bit(MMF_OOM_SKIP, &mm->flags)) {
@@ -776,7 +776,7 @@ static void oom_reap_task(struct task_struct *tsk)
 	int attempts = 0;
 	struct mm_struct *mm = tsk->signal->oom_mm;
 
-	/* Retry the down_read_trylock(mmap_sem) a few times */
+	/* Retry the down_read_trylock(mmap_lock) a few times */
 	while (attempts++ < MAX_OOM_REAP_RETRIES && !oom_reap_task_mm(tsk, mm))
 		schedule_timeout_idle(HZ/10);
 
@@ -793,7 +793,7 @@ done:
 
 	/*
 	 * Hide this mm from OOM killer because it has been either reaped or
-	 * somebody can't call up_write(mmap_sem).
+	 * somebody can't call up_write(mmap_lock).
 	 */
 	set_bit(MMF_OOM_SKIP, &mm->flags);
 
@@ -1078,7 +1078,7 @@ static void __oom_kill_process(struct task_struct *victim)
 	/*
 	 * Kill all user processes sharing victim->mm in other thread groups, if
 	 * any.  They don't get access to memory reserves, though, to avoid
-	 * depletion of all memory.  This prevents mm->mmap_sem livelock when an
+	 * depletion of all memory.  This prevents mm->mmap_lock livelock when an
 	 * oom killed thread cannot exit because it requires the semaphore and
 	 * its contended by another thread trying to allocate memory itself.
 	 * That thread will now get access to memory reserves since it has a

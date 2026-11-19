@@ -99,7 +99,7 @@ static struct hmm *hmm_register(struct mm_struct *mm)
 		goto error;
 
 	/*
-	 * We should only get here if hold the mmap_sem in write mode ie on
+	 * We should only get here if hold the mmap_lock in write mode ie on
 	 * registration of first mirror through hmm_mirror_register()
 	 */
 	hmm->mmu_notifier.ops = &hmm_mmu_notifier_ops;
@@ -233,7 +233,7 @@ static const struct mmu_notifier_ops hmm_mmu_notifier_ops = {
  * To start mirroring a process address space, the device driver must register
  * an HMM mirror struct.
  *
- * THE mm->mmap_sem MUST BE HELD IN WRITE MODE !
+ * THE mm->mmap_lock MUST BE HELD IN WRITE MODE !
  */
 int hmm_mirror_register(struct hmm_mirror *mirror, struct mm_struct *mm)
 {
@@ -799,8 +799,8 @@ EXPORT_SYMBOL(hmm_vma_range_done);
 /*
  * hmm_vma_fault() - try to fault some address in a virtual address range
  * @range: range being faulted
- * @block: allow blocking on fault (if true it sleeps and do not drop mmap_sem)
- * Returns: 0 success, error otherwise (-EAGAIN means mmap_sem have been drop)
+ * @block: allow blocking on fault (if true it sleeps and do not drop mmap_lock)
+ * Returns: 0 success, error otherwise (-EAGAIN means mmap_lock have been drop)
  *
  * This is similar to a regular CPU page fault except that it will not trigger
  * any memory migration if the memory being faulted is not accessible by CPUs.
@@ -810,7 +810,7 @@ EXPORT_SYMBOL(hmm_vma_range_done);
  *
  * Expected use pattern:
  * retry:
- *   down_read(&mm->mmap_sem);
+ *   down_read(&mm->mmap_lock);
  *   // Find vma and address device wants to fault, initialize hmm_pfn_t
  *   // array accordingly
  *   ret = hmm_vma_fault(range, write, block);
@@ -828,7 +828,7 @@ EXPORT_SYMBOL(hmm_vma_range_done);
  *   case -EPERM:
  *   default:
  *     // Handle error !
- *     up_read(&mm->mmap_sem)
+ *     up_read(&mm->mmap_lock)
  *     return;
  *   }
  *   // Take device driver lock that serialize device page table update
@@ -836,7 +836,7 @@ EXPORT_SYMBOL(hmm_vma_range_done);
  *   hmm_vma_range_done(range);
  *   // Commit pfns we got from hmm_vma_fault()
  *   driver_unlock_device_page_table_update();
- *   up_read(&mm->mmap_sem)
+ *   up_read(&mm->mmap_lock)
  *
  * YOU MUST CALL hmm_vma_range_done() AFTER THIS FUNCTION RETURN SUCCESS (0)
  * BEFORE FREEING THE range struct OR YOU WILL HAVE SERIOUS MEMORY CORRUPTION !

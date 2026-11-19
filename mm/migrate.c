@@ -2108,7 +2108,7 @@ int migrate_misplaced_transhuge_page(struct mm_struct *mm,
 	 * pmd before doing set_pmd_at(), nor to flush the TLB after
 	 * set_pmd_at().  Clearing the pmd here would introduce a race
 	 * condition against MADV_DONTNEED, because MADV_DONTNEED only holds the
-	 * mmap_sem for reading.  If the pmd is set to NULL at any given time,
+	 * mmap_lock for reading.  If the pmd is set to NULL at any given time,
 	 * MADV_DONTNEED won't wait on the pmd lock and it'll skip clearing this
 	 * pmd.
 	 */
@@ -2672,10 +2672,10 @@ static void migrate_vma_insert_page(struct migrate_vma *migrate,
 	 * pte_offset_map() on pmds where a huge pmd might be created
 	 * from a different thread.
 	 *
-	 * pte_alloc_map() is safe to use under down_write(mmap_sem) or when
+	 * pte_alloc_map() is safe to use under down_write(mmap_lock) or when
 	 * parallel threads are excluded by other means.
 	 *
-	 * Here we only have down_read(mmap_sem).
+	 * Here we only have down_read(mmap_lock).
 	 */
 	if (pte_alloc(mm, pmdp, addr))
 		goto abort;

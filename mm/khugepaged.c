@@ -510,7 +510,7 @@ void __khugepaged_exit(struct mm_struct *mm)
 		 * under mmap sem read mode). Stop here (after we
 		 * return all pagetables will be destroyed) until
 		 * khugepaged has finished working on the pagetables
-		 * under the mmap_sem.
+		 * under the mmap_lock.
 		 */
 		mmap_write_lock(mm);
 		mmap_write_unlock(mm);
@@ -867,8 +867,8 @@ khugepaged_alloc_page(struct page **hpage, gfp_t gfp, int node)
 #endif
 
 /*
- * If mmap_sem temporarily dropped, revalidate vma
- * before taking mmap_sem.
+ * If mmap_lock temporarily dropped, revalidate vma
+ * before taking mmap_lock.
  * Return 0 if succeeds, otherwise return none-zero
  * value (scan code).
  */
@@ -900,7 +900,7 @@ static int hugepage_vma_revalidate(struct mm_struct *mm, unsigned long address,
  * Only done if khugepaged_scan_pmd believes it is worthwhile.
  *
  * Called and returns without pte mapped or spinlocks held,
- * but with mmap_sem held to protect against vma changes.
+ * but with mmap_lock held to protect against vma changes.
  */
 
 static bool __collapse_huge_page_swapin(struct mm_struct *mm,
@@ -934,7 +934,7 @@ static bool __collapse_huge_page_swapin(struct mm_struct *mm,
 		swapped_in++;
 		ret = do_swap_page(&vmf);
 
-		/* do_swap_page returns VM_FAULT_RETRY with released mmap_sem */
+		/* do_swap_page returns VM_FAULT_RETRY with released mmap_lock */
 		if (ret & VM_FAULT_RETRY) {
 			mmap_read_lock(mm);
 			if (hugepage_vma_revalidate(mm, address, &vmf.vma)) {
@@ -983,9 +983,9 @@ static void collapse_huge_page(struct mm_struct *mm,
 	gfp = alloc_hugepage_khugepaged_gfpmask() | __GFP_THISNODE;
 
 	/*
-	 * Before allocating the hugepage, release the mmap_sem read lock.
+	 * Before allocating the hugepage, release the mmap_lock read lock.
 	 * The allocation can take potentially a long time if it involves
-	 * sync compaction, and we do not need to hold the mmap_sem during
+	 * sync compaction, and we do not need to hold the mmap_lock during
 	 * that. We will recheck the vma after taking it again in write mode.
 	 */
 	mmap_read_unlock(mm);
@@ -1017,8 +1017,8 @@ static void collapse_huge_page(struct mm_struct *mm,
 	}
 
 	/*
-	 * __collapse_huge_page_swapin always returns with mmap_sem locked.
-	 * If it fails, we release mmap_sem and jump out_nolock.
+	 * __collapse_huge_page_swapin always returns with mmap_lock locked.
+	 * If it fails, we release mmap_lock and jump out_nolock.
 	 * Continuing to collapse causes inconsistency.
 	 */
 	if (!__collapse_huge_page_swapin(mm, vma, address, pmd, referenced)) {
@@ -1242,7 +1242,7 @@ out_unmap:
 	pte_unmap_unlock(pte, ptl);
 	if (ret) {
 		node = khugepaged_find_target_node();
-		/* collapse_huge_page will return with the mmap_sem released */
+		/* collapse_huge_page will return with the mmap_lock released */
 		collapse_huge_page(mm, address, hpage, node, referenced);
 	}
 out:
@@ -1297,7 +1297,7 @@ static void retract_page_tables(struct address_space *mapping, pgoff_t pgoff)
 		if (!pmd)
 			continue;
 		/*
-		 * We need exclusive mmap_sem to retract page table.
+		 * We need exclusive mmap_lock to retract page table.
 		 * If trylock fails we would end up with pte-mapped THP after
 		 * re-fault. Not ideal, but it's more important to not disturb
 		 * the system too much.
@@ -1313,7 +1313,7 @@ static void retract_page_tables(struct address_space *mapping, pgoff_t pgoff)
 				 * ->anon_vma exists or the anon_vma is locked.
 				 * We already checked ->anon_vma above, but that check
 				 * is racy because ->anon_vma can be populated under the
-				 * mmap_sem in read mode.
+				 * mmap_lock in read mode.
 				 */
 				if (vma->anon_vma) {
 					up_write(&mm->mmap_lock);
@@ -1813,7 +1813,7 @@ skip:
 			khugepaged_scan.address += HPAGE_PMD_SIZE;
 			progress += HPAGE_PMD_NR;
 			if (ret)
-				/* we released mmap_sem so break loop */
+				/* we released mmap_lock so break loop */
 				goto breakouterloop_mmap_sem;
 			if (progress >= pages)
 				goto breakouterloop;

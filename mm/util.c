@@ -359,9 +359,9 @@ EXPORT_SYMBOL_GPL(__get_user_pages_fast);
  *
  * get_user_pages_fast provides equivalent functionality to get_user_pages,
  * operating on current and current->mm, with force=0 and vma=NULL. However
- * unlike get_user_pages, it must be called without mmap_sem held.
+ * unlike get_user_pages, it must be called without mmap_lock held.
  *
- * get_user_pages_fast may take mmap_sem and page table locks, so no
+ * get_user_pages_fast may take mmap_lock and page table locks, so no
  * assumptions can be made about lack of locking. get_user_pages_fast is to be
  * implemented in a way that is advantageous (vs get_user_pages()) when the
  * user memory area is already faulted in and present in ptes. However if the

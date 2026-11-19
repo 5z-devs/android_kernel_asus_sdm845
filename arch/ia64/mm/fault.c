@@ -104,7 +104,7 @@ ia64_do_page_fault (unsigned long address, unsigned long isr, struct pt_regs *re
 #ifdef CONFIG_VIRTUAL_MEM_MAP
 	/*
 	 * If fault is in region 5 and we are in the kernel, we may already
-	 * have the mmap_sem (pfn_valid macro is called during mmap). There
+	 * have the mmap_lock (pfn_valid macro is called during mmap). There
 	 * is no vma for region 5 addr's anyway, so skip getting the semaphore
 	 * and go directly to the exception handling code.
 	 */
@@ -192,7 +192,7 @@ retry:
 			flags &= ~FAULT_FLAG_ALLOW_RETRY;
 			flags |= FAULT_FLAG_TRIED;
 
-			 /* No need to up_read(&mm->mmap_sem) as we would
+			 /* No need to up_read(&mm->mmap_lock) as we would
 			 * have already released it in __lock_page_or_retry
 			 * in mm/filemap.c.
 			 */

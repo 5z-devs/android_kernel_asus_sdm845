@@ -1853,7 +1853,7 @@ static int unuse_pte_range(struct vm_area_struct *vma, pmd_t *pmd,
 
 	/*
 	 * We don't actually need pte lock while scanning for swp_pte: since
-	 * we hold page lock and mmap_sem, swp_pte cannot be inserted into the
+	 * we hold page lock and mmap_lock, swp_pte cannot be inserted into the
 	 * page table while we're scanning; though it could get zapped, and on
 	 * some architectures (e.g. x86_32 with PAE) we might catch a glimpse
 	 * of unmatched parts which look like swp_pte, so unuse_pte must

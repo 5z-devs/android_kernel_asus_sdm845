@@ -85,7 +85,7 @@ static void __kprobes bad_kernel_pc(struct pt_regs *regs, unsigned long vaddr)
 }
 
 /*
- * We now make sure that mmap_sem is held in all paths that call 
+ * We now make sure that mmap_lock is held in all paths that call 
  * this. Additionally, to prevent kswapd from ripping ptes from
  * under us, raise interrupts around the time that we look at the
  * pte, kswapd will have to wait to get his smp ipi response from
@@ -462,7 +462,7 @@ good_area:
 			flags &= ~FAULT_FLAG_ALLOW_RETRY;
 			flags |= FAULT_FLAG_TRIED;
 
-			/* No need to up_read(&mm->mmap_sem) as we would
+			/* No need to up_read(&mm->mmap_lock) as we would
 			 * have already released it in __lock_page_or_retry
 			 * in mm/filemap.c.
 			 */
