@@ -147,6 +147,15 @@
 #define __no_sanitize_address
 #endif
 
+/*
+ * The copy attribute makes a declaration inherit the attributes of the
+ * function it aliases.  module_init()/module_exit() rely on it so that the
+ * init_module/cleanup_module aliases keep the __cold of __init/__exit.
+ */
+#if __has_attribute(__copy__)
+#define __copy(symbol)			__attribute__((__copy__(symbol)))
+#endif
+
 #if GCC_VERSION >= 50100
 #define COMPILER_HAS_GENERIC_BUILTIN_OVERFLOW 1
 #endif
