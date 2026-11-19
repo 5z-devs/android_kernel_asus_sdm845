@@ -23,19 +23,6 @@
 #include <asm/pgalloc.h>
 #include "internal.h"
 
-/* gross hack for <=4.19 stable */
-#if defined(CONFIG_S390) || defined(CONFIG_ARM)
-static void tlb_remove_table_smp_sync(void *arg)
-{
-        /* Simply deliver the interrupt */
-}
-
-static void tlb_remove_table_sync_one(void)
-{
-        smp_call_function(tlb_remove_table_smp_sync, NULL, 1);
-}
-#endif
-
 enum scan_result {
 	SCAN_FAIL,
 	SCAN_SUCCEED,
@@ -1306,6 +1293,7 @@ static void retract_page_tables(struct address_space *mapping, pgoff_t pgoff)
 			if (!khugepaged_test_exit(mm)) {
 				spinlock_t *ptl;
 				unsigned long end = addr + HPAGE_PMD_SIZE;
+				struct mmu_notifier_range range;
 
 				/*
 				 * Re-check whether we have an ->anon_vma, because
@@ -1319,8 +1307,9 @@ static void retract_page_tables(struct address_space *mapping, pgoff_t pgoff)
 					up_write(&mm->mmap_lock);
 					continue;
 				}
-				mmu_notifier_invalidate_range_start(mm, addr,
-								    end);
+				mmu_notifier_range_init(&range, MMU_NOTIFY_CLEAR, 0,
+							NULL, mm, addr, end);
+				mmu_notifier_invalidate_range_start(&range);
 				ptl = pmd_lock(mm, pmd);
 				/* assume page table is clear */
 				_pmd = pmdp_collapse_flush(vma, addr, pmd);
@@ -1328,8 +1317,7 @@ static void retract_page_tables(struct address_space *mapping, pgoff_t pgoff)
 				mm_dec_nr_ptes(mm);
 				tlb_remove_table_sync_one();
 				pte_free(mm, pmd_pgtable(_pmd));
-				mmu_notifier_invalidate_range_end(mm, addr,
-								  end);
+				mmu_notifier_invalidate_range_end(&range);
 			}
 			mmap_write_unlock(mm);
 		}
