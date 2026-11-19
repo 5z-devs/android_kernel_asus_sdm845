@@ -14,6 +14,18 @@
 
 #include "f_qdss.h"
 
+static void *_qdss_ipc_log;
+
+#ifdef CONFIG_DYNAMIC_DEBUG
+#define qdss_log(fmt, ...) do { \
+	ipc_log_string(_qdss_ipc_log, "%s: " fmt,  __func__, ##__VA_ARGS__); \
+	dynamic_pr_debug("%s: " fmt, __func__, ##__VA_ARGS__); \
+} while (0)
+#else
+#define qdss_log(fmt, ...) \
+	ipc_log_string(_qdss_ipc_log, "%s: " fmt,  __func__, ##__VA_ARGS__)
+#endif
+
 static DEFINE_SPINLOCK(channel_lock);
 static LIST_HEAD(usb_qdss_ch_list);
 
