@@ -1,6 +1,6 @@
 config GOODIX_FINGERPRINT
 	tristate "generic goodix fingerprint driver"
-	depends on DRM_MSM
+	depends on ARCH_SDM845
 	default m
 	help
 	add support for goodix fingerprint driver.
