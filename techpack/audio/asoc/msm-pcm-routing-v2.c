@@ -24197,7 +24197,7 @@ static const int mi2s_rx_vi_fb_tx_value[] = {
 	MSM_BACKEND_DAI_MAX, MSM_BACKEND_DAI_SENARY_MI2S_TX
 };
 
-static const int const mi2s_rx_vi_fb_tx_value_for_quat[] = {
+static const int mi2s_rx_vi_fb_tx_value_for_quat[] = {
 	MSM_BACKEND_DAI_MAX, MSM_BACKEND_DAI_QUATERNARY_MI2S_TX
 };//for nxp AMP to Draco
 
