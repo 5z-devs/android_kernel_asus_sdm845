@@ -548,7 +548,6 @@ config CHARGER_BQ24190
 	depends on I2C
 	depends on EXTCON
 	depends on GPIOLIB || COMPILE_TEST
-	depends on REGULATOR
 	help
 	  Say Y to enable support for the TI BQ24190 battery charger.
 
