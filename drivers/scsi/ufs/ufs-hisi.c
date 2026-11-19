@@ -590,7 +590,6 @@ static int ufs_hi3660_init(struct ufs_hba *hba)
 }
 
 static struct ufs_hba_variant_ops ufs_hba_hisi_vops = {
-	.name = "hi3660",
 	.init = ufs_hi3660_init,
 	.link_startup_notify = ufs_hi3660_link_startup_notify,
 	.pwr_change_notify = ufs_hi3660_pwr_change_notify,
@@ -598,9 +597,14 @@ static struct ufs_hba_variant_ops ufs_hba_hisi_vops = {
 	.resume = ufs_hisi_resume,
 };
 
+static struct ufs_hba_variant ufs_hba_hisi_variant = {
+	.name = "hi3660",
+	.vops = &ufs_hba_hisi_vops,
+};
+
 static int ufs_hisi_probe(struct platform_device *pdev)
 {
-	return ufshcd_pltfrm_init(pdev, &ufs_hba_hisi_vops);
+	return ufshcd_pltfrm_init(pdev, &ufs_hba_hisi_variant);
 }
 
 static int ufs_hisi_remove(struct platform_device *pdev)
