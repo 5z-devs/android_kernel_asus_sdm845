@@ -274,9 +274,14 @@ static void bpf_tramp_image_put(struct bpf_tramp_image *im)
 	 * function and doesn't use percpu_ref.
 	 * Use call_rcu_tasks_trace() to wait for sleepable progs to finish.
 	 * Then use call_rcu_tasks() to wait for the rest of trampoline asm
-	 * and normal progs.
+	 * and normal progs.  Without Tasks Trace there can be no sleepable
+	 * progs, so only the call_rcu_tasks() step is needed.
 	 */
+#ifdef CONFIG_TASKS_TRACE_RCU
 	call_rcu_tasks_trace(&im->rcu, __bpf_tramp_image_put_rcu_tasks);
+#else
+	call_rcu_tasks(&im->rcu, __bpf_tramp_image_put_rcu_tasks);
+#endif
 }
 
 static struct bpf_tramp_image *bpf_tramp_image_alloc(u64 key, u32 idx)
@@ -595,7 +600,10 @@ void notrace __bpf_prog_exit(struct bpf_prog *prog, u64 start)
 
 u64 notrace __bpf_prog_enter_sleepable(struct bpf_prog *prog)
 {
+#ifdef CONFIG_TASKS_TRACE_RCU
+	/* Sleepable programs exist only with Tasks Trace. */
 	rcu_read_lock_trace();
+#endif
 	migrate_disable();
 	might_fault();
 	if (unlikely(__this_cpu_inc_return(*(prog->active)) != 1)) {
@@ -610,7 +618,10 @@ void notrace __bpf_prog_exit_sleepable(struct bpf_prog *prog, u64 start)
 	update_prog_stats(prog, start);
 	__this_cpu_dec(*(prog->active));
 	migrate_enable();
+#ifdef CONFIG_TASKS_TRACE_RCU
+	/* Sleepable programs exist only with Tasks Trace. */
 	rcu_read_unlock_trace();
+#endif
 }
 
 void notrace __bpf_tramp_enter(struct bpf_tramp_image *tr)
