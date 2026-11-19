@@ -4633,7 +4633,11 @@ static int hub_enable_device(struct usb_device *udev)
 	return hcd->driver->enable_device(hcd, udev);
 }
 
+#if IS_ENABLED(CONFIG_QPNP_SMB2)
 extern void set_otg_current_to_1p5A_needrestore(int flag);
+#else
+static inline void set_otg_current_to_1p5A_needrestore(int flag) { }
+#endif
 
 /* Reset device, (re)assign address, get device descriptor.
  * Device connection must be stable, no more debouncing needed.

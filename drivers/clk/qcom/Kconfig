@@ -4,6 +4,15 @@ config QCOM_GDSC
 	bool
 	select PM_GENERIC_DOMAINS if PM
 
+config QCOM_CLK_GDSC_REGULATOR
+	bool
+	depends on REGULATOR=y
+	default y
+	help
+	  Build the GDSC regulator wrapper into the Qualcomm clock driver.
+	  It registers GDSCs with the regulator framework, which only works
+	  when that framework is built in.
+
 config QCOM_RPMCC
 	bool
 

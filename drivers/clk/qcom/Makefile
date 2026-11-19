@@ -13,7 +13,7 @@ clk-qcom-y += clk-regmap-mux.o
 clk-qcom-y += clk-regmap-mux-div.o
 clk-qcom-y += reset.o clk-voter.o
 clk-qcom-y += clk-dummy.o clk-debug.o
-clk-qcom-y += gdsc-regulator.o
+clk-qcom-$(CONFIG_QCOM_CLK_GDSC_REGULATOR) += gdsc-regulator.o
 clk-qcom-$(CONFIG_QCOM_GDSC) += gdsc.o
 
 # Ported clock drivers
