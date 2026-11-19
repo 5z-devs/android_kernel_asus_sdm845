@@ -2924,6 +2924,49 @@ out:
  *
  * This function executes a full memory barrier before accessing the task state.
  */
+/**
+ * try_invoke_on_locked_down_task - Invoke a function on task in fixed state
+ * @p: Process for which the function is to be invoked.
+ * @func: Function to invoke.
+ * @arg: Argument to function.
+ *
+ * If the specified task can be locked down, invoke the specified function on it
+ * while it is locked down.  Returns false if the task could not be locked down,
+ * or the return value of @func otherwise.
+ *
+ * This function can only be used with @p either current or blocked, and
+ * must be called with preemption enabled.
+ */
+bool try_invoke_on_locked_down_task(struct task_struct *p,
+				    bool (*func)(struct task_struct *t, void *arg),
+				    void *arg)
+{
+	bool ret = false;
+	struct rq_flags rf;
+	struct rq *rq;
+
+	lockdep_assert_irqs_enabled();
+	raw_spin_lock_irq(&p->pi_lock);
+	if (p->on_rq) {
+		rq = __task_rq_lock(p, &rf);
+		if (task_rq(p) == rq)
+			ret = func(p, arg);
+		rq_unlock(rq, &rf);
+	} else {
+		switch (p->state) {
+		case TASK_RUNNING:
+		case TASK_WAKING:
+			break;
+		default:
+			smp_rmb(); // See smp_rmb() comment in try_to_wake_up().
+			if (!p->on_rq)
+				ret = func(p, arg);
+		}
+	}
+	raw_spin_unlock_irq(&p->pi_lock);
+	return ret;
+}
+
 int wake_up_process(struct task_struct *p)
 {
 	return try_to_wake_up(p, TASK_NORMAL, 0, 1);
