@@ -5223,10 +5223,17 @@ static int dsi_display_bind(struct device *dev,
 	 * panel's maximum; nothing downstream validates it, and bl_scale is
 	 * applied to it in 32-bit arithmetic.
 	 */
-	if (!display->panel->bl_config.bl_level && dsi_display_default_backlight)
+	if (!display->panel->bl_config.bl_level && dsi_display_default_backlight) {
+		u32 requested = dsi_display_default_backlight;
+
 		display->panel->bl_config.bl_level =
-			min(dsi_display_default_backlight,
+			min(requested,
 			    display->panel->bl_config.bl_max_level);
+		DSI_INFO("[%s] default backlight %u requested, seeded %u of %u\n",
+			 display->name, requested,
+			 display->panel->bl_config.bl_level,
+			 display->panel->bl_config.bl_max_level);
+	}
 
 	display_for_each_ctrl(i, display) {
 		display_ctrl = &display->ctrl[i];
