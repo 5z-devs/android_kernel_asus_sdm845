@@ -2246,6 +2246,10 @@ static int dsi_display_parse_boot_display_selection(void)
 		strlcpy(disp_buf, boot_displays[i].boot_param,
 			MAX_CMDLINE_PARAM_LEN);
 
+		/* An unset msm_drm.dsi_displayN= parameter is not an error. */
+		if (!disp_buf[0])
+			continue;
+
 		pos = strnstr(disp_buf, ":", MAX_CMDLINE_PARAM_LEN);
 
 		/* Use ':' as a delimiter to retrieve the display name */
