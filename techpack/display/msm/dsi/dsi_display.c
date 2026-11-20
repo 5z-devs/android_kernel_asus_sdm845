@@ -5212,6 +5212,16 @@ static int dsi_display_bind(struct device *dev,
 	DSI_INFO("Successfully bind display panel '%s'\n", display->name);
 	display->drm_dev = drm;
 
+	/*
+	 * A kernel-only boot has no lights HAL to request a level, and the DCS
+	 * backlight is only ever written from userspace, so seed the panel's
+	 * default here. dsi_display_set_backlight() only caches the value
+	 * while the panel is not initialised, and dsi_display_enable()
+	 * applies it on the first enable.
+	 */
+	if (!display->panel->bl_config.bl_level)
+		dsi_panel_bl_handoff(display->panel);
+
 	display_for_each_ctrl(i, display) {
 		display_ctrl = &display->ctrl[i];
 
