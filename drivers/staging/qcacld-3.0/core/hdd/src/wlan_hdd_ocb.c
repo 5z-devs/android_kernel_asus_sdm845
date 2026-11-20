@@ -220,7 +220,6 @@ static int hdd_ocb_register_sta(struct hdd_adapter *adapter)
 	struct hdd_station_ctx *sta_ctx = WLAN_HDD_GET_STATION_CTX_PTR(adapter);
 	struct ol_txrx_ops txrx_ops;
 	void *soc = cds_get_context(QDF_MODULE_ID_SOC);
-	struct cdp_pdev *pdev = cds_get_context(QDF_MODULE_ID_TXRX);
 
 	qdf_status = cdp_peer_register_ocb_peer(soc,
 				adapter->mac_addr.bytes);
