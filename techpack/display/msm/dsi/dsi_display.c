@@ -2225,7 +2225,7 @@ static void dsi_display_parse_cmdline_topology(struct dsi_display *display,
 			goto end;
 		}
 	}
-	DSI_DEBUG("successfully parsed command line topology and timing\n");
+	DSI_INFO("successfully parsed command line topology and timing\n");
 end:
 	display->cmdline_topology = cmdline_topology;
 	display->cmdline_timing = cmdline_timing;
@@ -2250,7 +2250,7 @@ static int dsi_display_parse_boot_display_selection(void)
 
 		/* Use ':' as a delimiter to retrieve the display name */
 		if (!pos) {
-			DSI_DEBUG("display name[%s]is not valid\n", disp_buf);
+			DSI_INFO("display name[%s]is not valid\n", disp_buf);
 			continue;
 		}
 
@@ -3736,7 +3736,7 @@ static int dsi_display_parse_dt(struct dsi_display *display)
 					dsi_ctrl_name);
 	phy_count = dsi_display_get_phandle_count(display, dsi_phy_name);
 
-	DSI_DEBUG("ctrl count=%d, phy count=%d\n",
+	DSI_INFO("ctrl count=%d, phy count=%d\n",
 			display->ctrl_count, phy_count);
 
 	if (!phy_count || !display->ctrl_count) {
@@ -5436,6 +5436,10 @@ int dsi_display_dev_probe(struct platform_device *pdev)
 		if (!panel_node)
 			DSI_WARN("default panel not found\n");
 	}
+
+	if (panel_node)
+		DSI_INFO("%s: selected panel node '%s'\n",
+			display->display_type, panel_node->name);
 
 	boot_disp->node = pdev->dev.of_node;
 	boot_disp->disp = display;
