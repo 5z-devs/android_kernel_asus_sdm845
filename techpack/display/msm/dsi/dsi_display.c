@@ -42,6 +42,9 @@ struct mutex dsi_op_mutex;
 static char dsi_display_primary[MAX_CMDLINE_PARAM_LEN];
 static char dsi_display_secondary[MAX_CMDLINE_PARAM_LEN];
 
+/* msm_drm.default_backlight: opt-in seed level for a HAL-less boot (0 = off) */
+static unsigned int dsi_display_default_backlight;
+
 //ASUS_BSP add to export display panel id to touch driver +++
 /*
  * msm_drm.dsi_display0 is a built-in module parameter and is already parsed
@@ -5213,14 +5216,14 @@ static int dsi_display_bind(struct device *dev,
 	display->drm_dev = drm;
 
 	/*
-	 * A kernel-only boot has no lights HAL to request a level, and the DCS
-	 * backlight is only ever written from userspace, so seed the panel's
-	 * default here. dsi_display_set_backlight() only caches the value
-	 * while the panel is not initialised, and dsi_display_enable()
-	 * applies it on the first enable.
+	 * A kernel-only boot has no lights HAL to request a level, so allow a
+	 * level to be seeded from the command line. Opt-in: a normal boot must
+	 * not show a brightness the user did not ask for between the first
+	 * enable and the lights HAL's first write.
 	 */
-	if (!display->panel->bl_config.bl_level)
-		dsi_panel_bl_handoff(display->panel);
+	if (!display->panel->bl_config.bl_level && dsi_display_default_backlight)
+		display->panel->bl_config.bl_level =
+					dsi_display_default_backlight;
 
 	display_for_each_ctrl(i, display) {
 		display_ctrl = &display->ctrl[i];
@@ -8000,5 +8003,9 @@ module_param_string(dsi_display1, dsi_display_secondary, MAX_CMDLINE_PARAM_LEN,
 								0600);
 MODULE_PARM_DESC(dsi_display1,
 	"msm_drm.dsi_display1=<display node>:<configX> where <display node> is 'secondary dsi display node name' and <configX> where x represents index in the topology list");
+module_param_named(default_backlight, dsi_display_default_backlight, uint,
+								0600);
+MODULE_PARM_DESC(default_backlight,
+	"msm_drm.default_backlight=<level>, seeded when nothing else requested one (0=off)");
 module_init(dsi_display_register);
 module_exit(dsi_display_unregister);
