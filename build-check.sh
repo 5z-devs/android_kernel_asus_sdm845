@@ -25,7 +25,8 @@
 #   CROSS_COMPILE= compiler prefix              (default: .toolchains/...)
 #   JOBS=n         parallel build jobs          (default: nproc)
 #   FRAGMENTS="..." config fragments, space separated, later ones win
-#                  (default: Z01R-check.config)
+#                  (default: Z01R-check.config, or Z01R-check.config and
+#                  Z01R.config with FORCE_WLAN=1)
 #   CLEAN=1        clean $OUT before configuring it
 #   FORCE_WLAN=1   build the CLD WLAN directory with the CFR and direct-buffer-rx
 #                  paths forced on, instead of Image.gz/dtbs (default: 0)
@@ -35,10 +36,10 @@
 # FORCE_WLAN exists because none of that code is reachable from the Z01R
 # configuration: kbuild never compiles it, so a warning or a break there is
 # invisible to the ordinary image build.  The forced switches are make
-# variables from qcacld's configs/default_defconfig and never enter .config,
-# so a build made with them cannot be told apart from an ordinary one by the
-# configuration checksum: the stamp records them, and the default output
-# directory is separate, so neither run can quietly reuse the other's objects.
+# variables on the command line and never enter .config, so a build made with
+# them cannot be told apart from an ordinary one by the configuration
+# checksum: the stamp records them, and the default output directory is
+# separate, so neither run can quietly reuse the other's objects.
 #
 # Exit status is 0 only when every requested target was produced from the
 # configuration this run checked.
@@ -52,12 +53,15 @@ CROSS_COMPILE=${CROSS_COMPILE:-$ROOT/.toolchains/aarch64--glibc--stable-2020.08-
 JOBS=${JOBS:-$(nproc)}
 FORCE_WLAN=${FORCE_WLAN:-0}
 
-# The CFR and direct-buffer-rx switches are make variables: they come from
-# qcacld's configs/default_defconfig and are never written to .config, so they
-# are forced on the make command line.  CONFIG_LITHIUM installs the 11ax HAL
-# include path, CONFIG_WMI_DBR_SUPPORT is what makes struct
-# direct_buf_rx_metadata visible to target_if_direct_buf_rx_api.h, and the
-# CFR/direct-buffer-rx switches decide which of the objects exist at all.
+# These are all forced on the make command line, so none of them is written
+# to .config.  CONFIG_LITHIUM is only a make variable (there is no such kconfig
+# symbol); it is the ifeq() in Kbuild that switches on the 11ax datapath, and
+# with it on, Kbuild stops with "#error Not 11ax" unless one of the
+# CONFIG_CNSS_QCA* chip switches names the chip: CONFIG_CNSS_QCA6390 selects
+# the qca6390 HAL directory and its firmware API includes.  CONFIG_WMI_DBR_SUPPORT
+# is what makes struct direct_buf_rx_metadata visible to
+# target_if_direct_buf_rx_api.h, and the CFR/direct-buffer-rx switches decide
+# which of the objects exist at all.
 WLAN_FORCE_CONFIG="CONFIG_LITHIUM=y CONFIG_CNSS_QCA6390=y \
 CONFIG_WLAN_CFR_ENABLE=y CONFIG_WLAN_ENH_CFR_ENABLE=y \
 CONFIG_DIRECT_BUF_RX_ENABLE=y CONFIG_WMI_DBR_SUPPORT=y"
