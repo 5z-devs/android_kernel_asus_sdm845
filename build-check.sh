@@ -18,12 +18,27 @@
 # build from stale objects.
 #
 # Usage: ./build-check.sh [make targets...]      (default: Image.gz dtbs)
-#   OUT=/path      out-of-tree build directory  (default: .build-check)
+#   OUT=/path      out-of-tree build directory  (default: .build-check,
+#                  .build-check-wlan with FORCE_WLAN=1)
+#   DEFCONFIG=name base configuration target    (default: defconfig,
+#                  vendor/sdm845-perf_defconfig with FORCE_WLAN=1)
 #   CROSS_COMPILE= compiler prefix              (default: .toolchains/...)
 #   JOBS=n         parallel build jobs          (default: nproc)
 #   FRAGMENTS="..." config fragments, space separated, later ones win
 #                  (default: Z01R-check.config)
 #   CLEAN=1        clean $OUT before configuring it
+#   FORCE_WLAN=1   build the CLD WLAN directory with the CFR and direct-buffer-rx
+#                  paths forced on, instead of Image.gz/dtbs (default: 0)
+#                  (runs on the device configuration, default $OUT is
+#                  .build-check-wlan)
+#
+# FORCE_WLAN exists because none of that code is reachable from the Z01R
+# configuration: kbuild never compiles it, so a warning or a break there is
+# invisible to the ordinary image build.  The forced switches are make
+# variables from qcacld's configs/default_defconfig and never enter .config,
+# so a build made with them cannot be told apart from an ordinary one by the
+# configuration checksum: the stamp records them, and the default output
+# directory is separate, so neither run can quietly reuse the other's objects.
 #
 # Exit status is 0 only when every requested target was produced from the
 # configuration this run checked.
@@ -33,18 +48,56 @@ set -eu
 STAMP_FORMAT=1
 
 ROOT=$(cd "$(dirname "$0")" && pwd)
-OUT=${OUT:-$ROOT/.build-check}
 CROSS_COMPILE=${CROSS_COMPILE:-$ROOT/.toolchains/aarch64--glibc--stable-2020.08-1/bin/aarch64-linux-}
 JOBS=${JOBS:-$(nproc)}
-FRAGMENTS=${FRAGMENTS:-$ROOT/arch/arm64/configs/vendor/asus/Z01R-check.config}
+FORCE_WLAN=${FORCE_WLAN:-0}
+
+# The CFR and direct-buffer-rx switches are make variables: they come from
+# qcacld's configs/default_defconfig and are never written to .config, so they
+# are forced on the make command line.  CONFIG_LITHIUM installs the 11ax HAL
+# include path, CONFIG_WMI_DBR_SUPPORT is what makes struct
+# direct_buf_rx_metadata visible to target_if_direct_buf_rx_api.h, and the
+# CFR/direct-buffer-rx switches decide which of the objects exist at all.
+WLAN_FORCE_CONFIG="CONFIG_LITHIUM=y CONFIG_CNSS_QCA6390=y \
+CONFIG_WLAN_CFR_ENABLE=y CONFIG_WLAN_ENH_CFR_ENABLE=y \
+CONFIG_DIRECT_BUF_RX_ENABLE=y CONFIG_WMI_DBR_SUPPORT=y"
+
+# The forced build runs on the device configuration, not on defconfig plus the
+# bring-up fragment: qcacld's Kconfig is only sourced with CONFIG_STAGING, its
+# feature set comes from configs/default_defconfig, and the 11ax datapath needs
+# the HIF bus and the PE/PMF feature switches the vendor defconfig already gets
+# right.  Rebuilding that half of the device configuration in a fragment would
+# be inventing a configuration nobody ships, so the forced run mirrors the
+# device build and only adds the switches above.
+if [ "$FORCE_WLAN" = 1 ]; then
+	DEFCONFIG=${DEFCONFIG:-vendor/sdm845-perf_defconfig}
+	FRAGMENTS=${FRAGMENTS:-"$ROOT/arch/arm64/configs/vendor/asus/Z01R-check.config $ROOT/arch/arm64/configs/vendor/asus/Z01R.config"}
+	OUT=${OUT:-$ROOT/.build-check-wlan}
+else
+	DEFCONFIG=${DEFCONFIG:-defconfig}
+	FRAGMENTS=${FRAGMENTS:-$ROOT/arch/arm64/configs/vendor/asus/Z01R-check.config}
+	OUT=${OUT:-$ROOT/.build-check}
+fi
 
 if [ "$#" -gt 0 ]; then
 	TARGETS=$*
+elif [ "$FORCE_WLAN" = 1 ]; then
+	TARGETS="drivers/staging/qcacld-3.0/"
 else
 	TARGETS="Image.gz dtbs"
 fi
 
 MAKE="make ARCH=arm64 O=$OUT CROSS_COMPILE=$CROSS_COMPILE"
+
+# Only the build gets the forced symbols: they must not end up in .config,
+# which stays the fragments' configuration so it can still be checked against
+# the stamp.
+BUILD_FLAGS=""
+if [ "$FORCE_WLAN" = 1 ]; then
+	# Keep going after a broken object: the point of this check is to see
+	# everything in the path that does not compile, not just the first one.
+	BUILD_FLAGS="-k $WLAN_FORCE_CONFIG"
+fi
 
 STAMP=$OUT/.build-check-stamp
 LOG=$OUT/.build-check.log
@@ -77,6 +130,10 @@ trap on_exit EXIT
 inputs() {
 	echo "stamp-format $STAMP_FORMAT"
 	echo "cross-compile $CROSS_COMPILE"
+	echo "defconfig $DEFCONFIG"
+	if [ "$FORCE_WLAN" = 1 ]; then
+		echo "force-wlan $(echo $WLAN_FORCE_CONFIG)"
+	fi
 	for frag in $FRAGMENTS; do
 		printf 'fragment %s %s\n' "$frag" "$(cksum < "$frag")"
 	done
@@ -142,7 +199,7 @@ elif [ -n "$(ls -A "$OUT" 2>/dev/null | grep -v '^\.build-check')" ]; then
 		die "$OUT holds build output but no $(basename "$STAMP"), so it was not produced here from a matching configuration (a copied or hand-built tree cannot be reused); rerun with CLEAN=1"
 	fi
 	if [ "$(grep -v '^config ' "$STAMP")" != "$(inputs)" ]; then
-		die "$OUT was built from different fragments or a different compiler; rerun with CLEAN=1"
+		die "$OUT was built from different fragments, forced WLAN symbols or a different compiler; rerun with CLEAN=1"
 	fi
 	fresh=0
 else
@@ -150,7 +207,7 @@ else
 fi
 
 # shellcheck disable=SC2086
-$MAKE defconfig >> "$LOG" 2>&1
+$MAKE $DEFCONFIG >> "$LOG" 2>&1
 
 # shellcheck disable=SC2086
 "$ROOT/scripts/kconfig/merge_config.sh" -m -O "$OUT" "$OUT/.config" \
@@ -172,7 +229,7 @@ fi
 build_started=1
 
 # shellcheck disable=SC2086
-$MAKE -j"$JOBS" $TARGETS >> "$LOG" 2>&1
+$MAKE -j"$JOBS" $BUILD_FLAGS $TARGETS >> "$LOG" 2>&1
 
 # Only artefacts that exist as files can be checked directly; dtbs and
 # modules are counted instead.
@@ -186,6 +243,17 @@ esac
 case " $TARGETS " in
 *" vmlinux "*) ARTEFACTS="$ARTEFACTS vmlinux" ;;
 esac
+
+if [ "$FORCE_WLAN" = 1 ]; then
+	# The objects the forced symbols exist for: the CFR dispatcher, the HDD
+	# CFR glue, and the direct-buffer-rx code whose HAL include previously
+	# kept the whole path from compiling.
+	ARTEFACTS="$ARTEFACTS \
+		drivers/staging/qca-wifi-host-cmn/target_if/cfr/src/target_if_cfr_6018.o \
+		drivers/staging/qca-wifi-host-cmn/target_if/direct_buf_rx/src/target_if_direct_buf_rx_api.o \
+		drivers/staging/qca-wifi-host-cmn/target_if/direct_buf_rx/src/target_if_direct_buf_rx_main.o \
+		drivers/staging/qcacld-3.0/core/hdd/src/wlan_hdd_cfr.o"
+fi
 
 incomplete=0
 
