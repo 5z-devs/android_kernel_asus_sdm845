@@ -63,6 +63,8 @@ u32 bl_level[10]= {0};
  */
 static void asus_wled_set(struct dsi_backlight_config *bl, int level)
 {
+	static bool wled_missing_logged;
+
 	led_trigger_event(bl->wled, level);
 
 	if (!bl->raw_bd)
@@ -71,6 +73,16 @@ static void asus_wled_set(struct dsi_backlight_config *bl, int level)
 		if (level > bl->raw_bd->props.max_brightness)
 			level = bl->raw_bd->props.max_brightness;
 		backlight_device_set_brightness(bl->raw_bd, level);
+		wled_missing_logged = false;
+	} else if (!wled_missing_logged) {
+		/*
+		 * Logged once per outage: the dimming ramp calls this in a loop,
+		 * and a panel left dark by a missing WLED device would otherwise
+		 * be silent about it.
+		 */
+		wled_missing_logged = true;
+		pr_info("[Display] %s: no raw backlight device, level %d not applied\n",
+			__func__, level);
 	}
 }
 
