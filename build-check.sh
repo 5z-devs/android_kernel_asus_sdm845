@@ -116,17 +116,28 @@ mkdir -p "$OUT"
 : > "$LOG"
 build_started=0
 
+cleaned=0
+
 if [ "${CLEAN:-0}" = 1 ]; then
 	if [ -d "$OUT" ]; then
 		say "CLEAN=1, cleaning $OUT"
 		$MAKE mrproper >/dev/null 2>&1 || true
 		rm -f "$STAMP" "$MARKER" "$EXPECTED" "$EXPECTED.raw"
-		[ -z "$(ls -A "$OUT" 2>/dev/null | grep -v '^\.build-check')" ] || \
-			die "$OUT still holds files after 'make mrproper'; remove it and rerun"
+		# 'make mrproper' keeps the empty directory skeleton and its
+		# Makefile/source stubs, so the presence of files proves nothing.
+		# Only output kbuild would reuse means the clean did not happen.
+		leftover=$(find "$OUT" \( -name '*.o' -o -name '.config' \
+			-o -name 'vmlinux' -o -name 'System.map' \
+			-o -name 'built-in.a' \) 2>/dev/null | head -n 1)
+		[ -z "$leftover" ] || \
+			die "$OUT still holds build output after 'make mrproper' ($leftover); remove it and rerun"
+		cleaned=1
 	fi
 fi
 
-if [ -n "$(ls -A "$OUT" 2>/dev/null | grep -v '^\.build-check')" ]; then
+if [ "$cleaned" = 1 ]; then
+	fresh=1
+elif [ -n "$(ls -A "$OUT" 2>/dev/null | grep -v '^\.build-check')" ]; then
 	if [ ! -f "$STAMP" ]; then
 		die "$OUT holds build output but no $(basename "$STAMP"), so it was not produced here from a matching configuration (a copied or hand-built tree cannot be reused); rerun with CLEAN=1"
 	fi
