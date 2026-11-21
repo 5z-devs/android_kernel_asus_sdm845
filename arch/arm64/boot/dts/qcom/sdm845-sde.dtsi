@@ -507,7 +507,6 @@
 		      <0xae94200 0x100>;
 		reg-names = "dsi_phy", "dyn_refresh_base";
 
-		gdsc-supply = <&mdss_core_gdsc>;
 		vdda-0p9-supply = <&pm8998_l1>;
 		qcom,platform-strength-ctrl = [55 03
 						55 03
@@ -542,7 +541,6 @@
 		      <0xae96200 0x100>;
 		reg-names = "dsi_phy", "dyn_refresh_base";
 
-		gdsc-supply = <&mdss_core_gdsc>;
 		vdda-0p9-supply = <&pm8998_l1>;
 		qcom,platform-strength-ctrl = [55 03
 						55 03
